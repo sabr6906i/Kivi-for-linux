@@ -3,6 +3,9 @@
 import argparse
 import json
 import os
+import re
+import wave
+from copy import deepcopy
 from pathlib import Path
 import shutil
 import signal
@@ -16,6 +19,8 @@ import urllib.request
 import urllib.error
 import uuid
 
+from bol_features import DEFAULTS, History, expand, write
+
 CONFIG = Path(os.environ.get('XDG_CONFIG_HOME', str(Path.home() / '.config'))) / 'bol-linux'
 RUNTIME = Path(os.environ.get('XDG_RUNTIME_DIR', f'/tmp/bol-{os.getuid()}')) / 'bol-linux'
 SOCKET = RUNTIME / 'control.sock'
@@ -24,9 +29,9 @@ SCRIPT = str(Path(__file__).resolve())
 
 def config():
     try:
-        return json.loads((CONFIG / 'settings.json').read_text())
+        return {**deepcopy(DEFAULTS), **json.loads((CONFIG / 'settings.json').read_text())}
     except FileNotFoundError:
-        return {}
+        return deepcopy(DEFAULTS)
 
 
 def save_config(value):
@@ -48,18 +53,21 @@ def notify(message):
         threading.Thread(target=send, daemon=True).start()
 
 
-def multipart(audio, language):
+def multipart(audio, language, mode="transcribe", vocabulary=None):
     boundary = uuid.uuid4().hex
     parts = []
-    for key, value in [('model', 'saaras:v4'), ('language_code', language)]:
+    fields = [('model', 'saaras:v4'), ('language_code', language), ('mode', mode)]
+    if vocabulary:
+        fields.append(('keyterms', json.dumps(vocabulary[:50], ensure_ascii=False)))
+    for key, value in fields:
         parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{key}"\r\n\r\n{value}\r\n'.encode())
     parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="speech.wav"\r\nContent-Type: audio/wav\r\n\r\n'.encode())
     parts.extend([audio, f'\r\n--{boundary}--\r\n'.encode()])
     return b''.join(parts), boundary
 
 
-def transcribe(path, settings):
-    body, boundary = multipart(path.read_bytes(), settings.get('language', 'unknown'))
+def transcribe_one(path, settings):
+    body, boundary = multipart(path.read_bytes(), settings.get('language', 'unknown'), settings.get('output_mode', 'transcribe'), settings.get('vocabulary', []))
     request = urllib.request.Request('https://api.sarvam.ai/speech-to-text', data=body,
         headers={'api-subscription-key': settings['api_key'], 'Content-Type': f'multipart/form-data; boundary={boundary}'})
     try:
@@ -73,6 +81,64 @@ def transcribe(path, settings):
     return text
 
 
+def transcribe(path, settings, cancelled=lambda: False):
+    with wave.open(str(path), 'rb') as audio:
+        seconds = audio.getnframes() / audio.getframerate()
+    if cancelled():
+        raise RuntimeError('Cancelled')
+    if seconds < 26:
+        return transcribe_one(path, settings)
+    # Keep each REST request below the API's short-audio limit.
+    if not shutil.which('ffmpeg'):
+        raise RuntimeError('Long recordings need ffmpeg. Install it or record less than 25 seconds.')
+    segment = str(path.parent / 'part-%03d.wav')
+    subprocess.run(['ffmpeg', '-v', 'error', '-i', str(path), '-f', 'segment', '-segment_time', '24', '-c:a', 'pcm_s16le', segment], check=True, timeout=30, capture_output=True)
+    texts = []
+    for chunk in sorted(path.parent.glob('part-*.wav')):
+        if cancelled():
+            raise RuntimeError('Cancelled')
+        texts.append(transcribe_one(chunk, settings))
+    return '\n'.join(texts)
+
+
+def active_window():
+    result = subprocess.run(['hyprctl', '-j', 'activewindow'], capture_output=True, text=True, check=True, timeout=3)
+    return json.loads(result.stdout)
+
+
+def shortcut(key, mods='CTRL'):
+    # Restrict interpolation to JSON-escaped literals, also valid Lua strings here.
+    code = 'hl.dsp.send_shortcut({ mods = ' + json.dumps(mods) + ', key = ' + json.dumps(key) + ' })'
+    result = subprocess.run(['hyprctl', 'dispatch', code], capture_output=True, text=True, timeout=3)
+    if result.returncode or result.stdout.strip() != 'ok':
+        raise RuntimeError('Hyprland rejected the keyboard shortcut.')
+
+
+def copy_text(text):
+    subprocess.run(['wl-copy', '--', text], check=True, timeout=3)
+
+
+def selection_for(target):
+    """Explicit Ctrl+C capture with sentinel; never mistake old clipboard text for a selection."""
+    if active_window().get('address') != target:
+        return ''
+    old = subprocess.run(['wl-paste', '--no-newline'], capture_output=True, timeout=2).stdout
+    sentinel = 'bol-selection-' + uuid.uuid4().hex
+    copy_text(sentinel)
+    try:
+        shortcut('C')
+        for _ in range(12):
+            time.sleep(.04)
+            result = subprocess.run(['wl-paste', '--no-newline'], capture_output=True, timeout=2)
+            if result.returncode == 0 and result.stdout != sentinel.encode():
+                if active_window().get('address') == target:
+                    return result.stdout.decode('utf-8', errors='replace')[:24000]
+                return ''
+        return ''
+    finally:
+        subprocess.run(['wl-copy'], input=old, timeout=3, check=True)
+
+
 class Service:
     def __init__(self):
         self.lock = threading.RLock()
@@ -81,57 +147,97 @@ class Service:
         self.recorder = None
         self.directory = None
         self.target = ''
+        self.app = ''
+        self.selection = ''
+        self.mode = 'dictate'
         self.generation = 0
+        self.latest = ''
+        self.original = ''
+        self.started = 0
+        self.outcome = ''
+        self.settings = {}
 
     def status(self):
-        return {'state': self.state, 'error': self.error}
+        return {'state': self.state, 'error': self.error, 'mode': self.mode,
+                'seconds': round(time.monotonic() - self.started, 1) if self.recorder else 0,
+                'outcome': self.outcome, 'has_result': bool(self.latest)}
 
-    def cancel(self):
-        self.generation += 1
+    def stop_recorder(self):
         if self.recorder:
-            self.recorder.send_signal(signal.SIGINT)
-            self.recorder.wait(timeout=5)
-            self.recorder = None
+            process, self.recorder = self.recorder, None
+            if process.poll() is None:
+                process.send_signal(signal.SIGINT)
+                try:
+                    process.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=2)
+
+    def cancel(self, silent=False):
+        self.generation += 1
+        self.stop_recorder()
         if self.directory:
             self.directory.cleanup()
             self.directory = None
-        self.state, self.error = 'Ready', ''
-        notify('Cancelled. Microphone stopped.')
+        self.state, self.error, self.outcome = 'Ready', '', 'Cancelled'
+        if not silent:
+            notify('Cancelled. Microphone stopped.')
         return self.status()
 
     def command(self, command):
         with self.lock:
             if command == 'status':
                 return self.status()
+            if command == 'result':
+                return {'text': self.latest, 'original': self.original}
+            if command == 'copy-last':
+                if self.latest:
+                    copy_text(self.latest)
+                    notify('Last result copied.')
+                return self.status()
             if command == 'cancel':
                 return self.cancel()
-            if command != 'toggle':
+            if command == 'stop':
+                if self.recorder:
+                    self.finish(self.generation)
+                return self.status()
+            if command not in ['toggle', 'start', 'edit']:
                 return {'error': 'Unknown command'}
-            if self.state == 'Transcribing':
+            if self.state in ['Transcribing', 'Writing']:
+                notify('Still processing. F9 cancels this request.')
                 return self.status()
             if self.recorder:
-                self.finish(self.generation)
+                if command != 'start':
+                    self.finish(self.generation)
                 return self.status()
             settings = config()
             if not settings.get('api_key'):
                 self.error = 'Open Bol settings and save your Sarvam API key first.'
                 notify(self.error)
                 return self.status()
-            for binary in ['pw-record', 'wl-copy', 'hyprctl']:
+            for binary in ['pw-record', 'wl-copy', 'wl-paste', 'hyprctl']:
                 if not shutil.which(binary):
                     raise RuntimeError(f'Missing dependency: {binary}')
-            active = subprocess.run(['hyprctl', '-j', 'activewindow'], capture_output=True, text=True, check=True)
-            self.target = json.loads(active.stdout).get('address', '')
+            active = active_window()
+            self.target, self.app = active.get('address', ''), active.get('class', '')
+            self.mode = 'edit' if command == 'edit' else 'dictate'
+            terminal = any(name in self.app.casefold() for name in ['kitty', 'alacritty', 'foot', 'wezterm', 'konsole', 'terminal'])
+            self.selection = selection_for(self.target) if self.mode == 'edit' and not terminal else ''
+            self.settings = settings
             self.directory = tempfile.TemporaryDirectory(prefix='recording-', dir=RUNTIME)
             self.path = Path(self.directory.name) / 'speech.wav'
-            self.recorder = subprocess.Popen(['pw-record', '--rate=16000', '--channels=1', '--format=s16', str(self.path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            self.state, self.error = 'Recording', ''
+            args = ['pw-record', '--rate=16000', '--channels=1', '--format=s16']
+            if settings.get('microphone'):
+                args += ['--target', settings['microphone']]
+            self.recorder = subprocess.Popen(args + [str(self.path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            self.state, self.error, self.outcome = 'Recording', '', ''
+            self.started = time.monotonic()
             self.generation += 1
             generation = self.generation
-            timer = threading.Timer(25, self.auto_finish, args=(generation,))
+            timer = threading.Timer(min(300, max(5, int(settings.get('record_seconds', 120)))), self.auto_finish, args=(generation,))
             timer.daemon = True
             timer.start()
-            notify('Listening… Press the shortcut again to finish. Limit: 25 seconds.')
+            notify('Listening for an editing instruction…' if self.mode == 'edit' else 'Listening… Press the recording key again to finish.')
             return self.status()
 
     def auto_finish(self, generation):
@@ -140,35 +246,60 @@ class Service:
                 self.finish(generation)
 
     def finish(self, generation):
-        self.recorder.send_signal(signal.SIGINT)
-        self.recorder.wait(timeout=5)
-        self.recorder = None
+        self.stop_recorder()
         self.state = 'Transcribing'
         directory, path, target = self.directory, self.path, self.target
         self.directory = None
-        threading.Thread(target=self.deliver, args=(generation, directory, path, target), daemon=True).start()
+        context = (dict(self.settings), self.app, self.mode, self.selection)
+        threading.Thread(target=self.deliver, args=(generation, directory, path, target, context), daemon=True).start()
 
-    def deliver(self, generation, directory, path, target):
+    def deliver(self, generation, directory, path, target, context):
+        settings, app, mode, selection = context
         try:
             if not path.exists() or path.stat().st_size < 100:
                 raise RuntimeError('No audio recorded. Check your microphone in PipeWire.')
-            settings = config()
-            text = transcribe(path, settings)
+            original = transcribe(path, settings, cancelled=lambda: generation != self.generation)
             with self.lock:
                 if generation != self.generation:
                     return
-                subprocess.run(['wl-copy', '--', text], check=True, timeout=5)
-                # Never refocus a window or paste into a different application.
-                current = subprocess.run(['hyprctl', '-j', 'activewindow'], capture_output=True, text=True, check=True)
-                same_window = target and json.loads(current.stdout).get('address') == target
-                if settings.get('auto_paste', True) and same_window:
-                    pasted = subprocess.run(['hyprctl', 'dispatch', 'hl.dsp.send_shortcut({ mods = "CTRL", key = "V" })'], capture_output=True, text=True, timeout=5)
-                    if pasted.returncode or 'ok' not in pasted.stdout.lower():
-                        raise RuntimeError('Text copied, but automatic paste failed. Press Ctrl+V.')
-                    notify('Dictation pasted.')
+            text, snippet = expand(original, settings)
+            warning = ''
+            if mode == 'edit' or (settings.get('polish') and not snippet):
+                with self.lock:
+                    if generation != self.generation:
+                        return
+                    self.state = 'Writing'
+                try:
+                    text = write(text, settings, app=app, selection=selection, editing=mode == 'edit')
+                except Exception as error:
+                    if mode == 'edit':
+                        raise
+                    warning = str(error) + ' Original transcription recovered.'
+            with self.lock:
+                if generation != self.generation:
+                    return
+                self.latest, self.original = text, original
+                if settings.get('history_enabled'):
+                    History(CONFIG).add(app, mode, original, text)
+                same_window = target and active_window().get('address') == target
+                selection_unchanged = True
+                terminal = any(name in app.casefold() for name in ['kitty', 'alacritty', 'foot', 'wezterm', 'konsole', 'terminal'])
+                if mode == 'edit' and same_window and not terminal:
+                    selection_unchanged = selection_for(target) == selection
+                copy_text(text)
+                same_window = same_window and active_window().get('address') == target
+                if settings.get('auto_paste', True) and same_window and selection_unchanged:
+                    # Electron editors and terminals often use different paste shortcuts.
+                    terminal = any(name in app.casefold() for name in ['kitty', 'alacritty', 'foot', 'wezterm', 'konsole', 'terminal'])
+                    if mode == 'edit' and selection:
+                        # Some X11 text widgets insert on Ctrl+V without replacing a selection.
+                        shortcut('BackSpace', '')
+                    shortcut('V', 'CTRL SHIFT' if terminal else 'CTRL')
+                    self.outcome = 'Paste shortcut sent'
                 else:
-                    notify('Dictation copied. Press Ctrl+V to paste.')
-                self.state, self.error = 'Ready', ''
+                    self.outcome = 'Copied — paste manually (focus or selection changed)' if not same_window or not selection_unchanged else 'Copied'
+                self.state, self.error = 'Ready', warning
+                notify(warning or self.outcome)
         except Exception as error:
             with self.lock:
                 if generation == self.generation:
@@ -184,7 +315,11 @@ def request(command, start=True):
             client.settimeout(10)
             client.connect(str(SOCKET))
             client.sendall(command.encode())
-            return json.loads(client.recv(8192))
+            client.shutdown(socket.SHUT_WR)
+            chunks = []
+            while chunk := client.recv(65536):
+                chunks.append(chunk)
+            return json.loads(b''.join(chunks))
     except (FileNotFoundError, ConnectionRefusedError):
         if not start:
             raise
@@ -208,6 +343,11 @@ def daemon():
             return
         SOCKET.unlink(missing_ok=True)
         service = Service()
+        def terminate(signum, frame):
+            raise SystemExit(0)
+        signal.signal(signal.SIGTERM, terminate)
+        signal.signal(signal.SIGINT, terminate)
+        indicator = subprocess.Popen([sys.executable, SCRIPT, 'indicator'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         with socket.socket(socket.AF_UNIX) as server:
             server.bind(str(SOCKET))
             os.chmod(SOCKET, 0o600)
@@ -223,60 +363,33 @@ def daemon():
                             result = {'error': str(error)}
                         client.sendall(json.dumps(result).encode())
             finally:
-                service.cancel()
+                service.cancel(silent=True)
+                indicator.terminate()
                 SOCKET.unlink(missing_ok=True)
 
 
 def gui():
-    import tkinter as tk
-    from tkinter import ttk, messagebox
-    root = tk.Tk()
-    root.title('Bol · Voice typing for Linux')
-    root.geometry('510x430')
-    root.configure(bg='#111827')
-    root.resizable(False, False)
-    settings = config()
-    frame = ttk.Frame(root, padding=26)
-    frame.pack(fill='both', expand=True)
-    ttk.Label(frame, text='Bol', font=('', 26, 'bold')).pack(anchor='w')
-    ttk.Label(frame, text='Speak naturally. Type anywhere.', font=('', 12)).pack(anchor='w', pady=(0, 16))
-    status = tk.StringVar(value='Ready')
-    ttk.Label(frame, textvariable=status, wraplength=450).pack(anchor='w', pady=8)
-    ttk.Label(frame, text='Sarvam API key').pack(anchor='w')
-    key = tk.StringVar(value=settings.get('api_key', ''))
-    ttk.Entry(frame, textvariable=key, show='•', width=52).pack(fill='x', pady=(4, 12))
-    ttk.Label(frame, text='Speech language').pack(anchor='w')
-    language = tk.StringVar(value=settings.get('language', 'unknown'))
-    ttk.Combobox(frame, textvariable=language, state='readonly', values=['unknown', 'en-IN', 'hi-IN', 'pa-IN', 'ta-IN', 'te-IN', 'bn-IN', 'mr-IN', 'gu-IN', 'kn-IN', 'ml-IN', 'ur-IN']).pack(fill='x', pady=4)
-    paste = tk.BooleanVar(value=settings.get('auto_paste', True))
-    ttk.Checkbutton(frame, text='Paste automatically when the original app is focused', variable=paste).pack(anchor='w', pady=8)
-    def save():
-        save_config({'api_key': key.get().strip(), 'language': language.get(), 'auto_paste': paste.get()})
-        messagebox.showinfo('Saved', 'Settings saved locally. Use F8 in the app where you want to type.')
-    ttk.Button(frame, text='Save settings', command=save).pack(anchor='w', pady=6)
-    ttk.Button(frame, text='Cancel recording / pending result', command=lambda: request('cancel')).pack(anchor='w')
-    ttk.Label(frame, text='Audio is sent to Sarvam for transcription.\nRecordings are deleted after each request.', foreground='#666666').pack(anchor='w', pady=12)
-    def poll():
-        try:
-            result = request('status')
-            status.set(result.get('error') or result['state'])
-        except Exception as error:
-            status.set(str(error))
-        root.after(1000, poll)
-    root.after(100, poll)
-    root.mainloop()
+    from bol_ui import settings_window
+    settings_window(sys.modules[__name__])
+
+
+def indicator():
+    from bol_ui import recording_indicator
+    recording_indicator(sys.modules[__name__])
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', nargs='?', default='settings', choices=['settings', 'toggle', 'cancel', 'status', 'daemon', 'doctor'])
+    parser.add_argument('command', nargs='?', default='settings', choices=['settings', 'toggle', 'start', 'stop', 'edit', 'cancel', 'status', 'result', 'copy-last', 'daemon', 'doctor', 'indicator'])
     args = parser.parse_args()
     if args.command == 'daemon':
         daemon()
+    elif args.command == 'indicator':
+        indicator()
     elif args.command == 'settings':
         gui()
     elif args.command == 'doctor':
-        for name in ['python', 'pw-record', 'wl-copy', 'hyprctl', 'notify-send']:
+        for name in ['python', 'pw-record', 'wl-copy', 'wl-paste', 'hyprctl', 'notify-send']:
             print(f'{name}: {shutil.which(name) or "MISSING"}')
         print('API key:', 'configured' if config().get('api_key') else 'not configured')
         print('Session:', os.environ.get('XDG_SESSION_TYPE', 'unknown'))

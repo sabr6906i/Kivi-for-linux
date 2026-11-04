@@ -34,7 +34,8 @@ class Tests(unittest.TestCase):
             result = service.command('cancel')
         self.assertIsNotNone(recorder.poll())
         self.assertFalse(folder.exists())
-        self.assertEqual(result, {'state': 'Ready', 'error': ''})
+        self.assertEqual(result['state'], 'Ready')
+        self.assertEqual(result['error'], '')
         notification.assert_called_once_with('Cancelled. Microphone stopped.')
 
     def test_cancel_discards_pending_result_without_upload(self):
