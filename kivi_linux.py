@@ -369,7 +369,10 @@ def daemon():
 
 
 def gui():
-    from bol_ui import settings_window
+    try:
+        from bol_gtk import settings_window
+    except (ImportError, ValueError):
+        from bol_ui import settings_window
     settings_window(sys.modules[__name__])
 
 

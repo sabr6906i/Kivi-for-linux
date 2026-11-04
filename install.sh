@@ -4,7 +4,7 @@ app_dir="${XDG_DATA_HOME:-$HOME/.local/share}/bol-linux"
 bin_dir="$HOME/.local/bin"
 mkdir -p "$app_dir" "$bin_dir" "${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 install -m 755 "$(dirname "$0")/kivi_linux.py" "$app_dir/bol.py"
-install -m 644 "$(dirname "$0")/bol_features.py" "$(dirname "$0")/bol_ui.py" "$app_dir/"
+install -m 644 "$(dirname "$0")/bol_features.py" "$(dirname "$0")/bol_ui.py" "$(dirname "$0")/bol_gtk.py" "$app_dir/"
 cat > "$bin_dir/bol" <<EOF
 #!/bin/sh
 exec /usr/bin/python "$app_dir/bol.py" "\$@"

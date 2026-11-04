@@ -22,7 +22,7 @@ The app is an early implementation of these workflows, not a claim of complete K
 On Arch Linux:
 
 ```sh
-sudo pacman -S python tk pipewire wl-clipboard libnotify ffmpeg
+sudo pacman -S python python-gobject gtk4 tk pipewire wl-clipboard libnotify ffmpeg
 git clone git@github.com:sabr6906i/Kivi-for-linux.git
 cd Kivi-for-linux
 ./install.sh
@@ -52,6 +52,8 @@ Run `hyprctl reload`. On the original development machine these bindings are alr
 Keep the original text box focused and leave the selection unchanged. If the app or captured selection changes, Bol copies the result for manual paste. The latest result is available in **History → Refresh** even with disk history disabled. `bol copy-last` also recovers it. Latest-result memory is cleared when the daemon exits.
 
 ## Personalize
+
+Settings use a native GTK 4 workspace with neutral dark surfaces, a sidebar, and grouped controls. If GTK bindings are unavailable, Bol falls back to its Tk settings window. The recording indicator uses Tk.
 
 Open **Bol Voice Typing** from your app launcher, or run `~/.local/bin/bol settings`.
 
@@ -90,7 +92,7 @@ python -m py_compile kivi_linux.py bol_features.py bol_ui.py
 bash -n install.sh
 ```
 
-`kivi_linux.py` provides recording, IPC and insertion. `bol_features.py` handles vocabulary/snippets, writing API and SQLite history. `bol_ui.py` contains settings and the recording indicator. The app uses Python's standard library plus Tk and system executables.
+`kivi_linux.py` provides recording, IPC and insertion. `bol_features.py` handles vocabulary/snippets, writing API and SQLite history. `bol_gtk.py` contains the native GTK settings workspace. `bol_ui.py` provides the fallback settings window, shortcut helpers, and recording indicator. The app uses Python's standard library plus Tk and system executables.
 
 `bol doctor` checks dependencies, and `bol status` shows recording/processing state. The daemon starts on demand. After an upgrade, stop the existing daemon before starting the new version so it imports the updated modules. It handles SIGTERM by stopping its recorder and cleaning temporary audio.
 
