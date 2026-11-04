@@ -69,86 +69,216 @@ def settings_window(core):
     from tkinter import ttk, messagebox, simpledialog
     root = tk.Tk(className='BolSettings')
     root.title('Bol · Voice workspace')
-    root.geometry('860x720')
-    root.minsize(760, 640)
+    root.geometry('1120x820')
+    root.minsize(960, 680)
+    bg, panel, fg, muted, accent = '#f5f6fa', '#ffffff', '#172033', '#69758a', '#5856d6'
+    line, field, sidebar = '#e3e7ef', '#f8f9fc', '#171b29'
+    root.configure(bg=bg)
     style = ttk.Style(root)
     style.theme_use('clam')
-    bg, panel, fg, muted, accent = '#111827', '#1f2937', '#f3f4f6', '#9ca3af', '#6ee7b7'
-    root.configure(bg=bg)
     style.configure('.', background=bg, foreground=fg, font=('Sans', 10))
     style.configure('TFrame', background=bg)
-    style.configure('TLabel', background=bg)
-    style.configure('TButton', background=panel, padding=(12, 7))
-    style.map('TButton', background=[('active', '#374151')])
-    style.configure('TEntry', fieldbackground=panel, foreground=fg, insertcolor=fg)
-    style.configure('TCombobox', fieldbackground=panel, foreground=fg, arrowcolor=fg)
-    style.map('TCombobox', fieldbackground=[('readonly', panel)], selectbackground=[('readonly', panel)], selectforeground=[('readonly', fg)])
-    style.configure('TNotebook', background=bg, borderwidth=0)
-    style.configure('TNotebook.Tab', background=panel, foreground=fg, padding=(12, 9))
-    style.map('TNotebook.Tab', background=[('selected', '#065f46')])
-    style.configure('TCheckbutton', background=bg, foreground=fg)
-    style.map('TCheckbutton', background=[('active', bg)])
+    style.configure('Card.TFrame', background=panel)
+    style.configure('TLabel', background=bg, foreground=fg)
+    style.configure('Card.TLabel', background=panel, foreground=fg)
+    style.configure('Muted.TLabel', background=panel, foreground=muted, font=('Sans', 9))
+    style.configure('TButton', background=panel, foreground=fg, bordercolor=line,
+                    focuscolor=accent, padding=(14, 9), relief='flat')
+    style.map('TButton', background=[('active', '#eef0f8')])
+    style.configure('Primary.TButton', background=accent, foreground='white', bordercolor=accent,
+                    padding=(22, 10), font=('Sans', 10, 'bold'))
+    style.map('Primary.TButton', background=[('disabled', '#b6b4e8'), ('active', '#4845bf')], foreground=[('disabled', '#ffffff')])
+    style.configure('TEntry', fieldbackground=field, foreground=fg, bordercolor=line,
+                    lightcolor=line, darkcolor=line, padding=9, insertcolor=fg)
+    style.map('TEntry', bordercolor=[('focus', accent)])
+    style.configure('TCombobox', fieldbackground=field, foreground=fg, arrowcolor=muted,
+                    bordercolor=line, padding=8, arrowsize=13)
+    style.map('TCombobox', fieldbackground=[('readonly', field)], selectbackground=[('readonly', field)], selectforeground=[('readonly', fg)])
+    style.configure('TCheckbutton', background=panel, foreground=fg, padding=(0, 6))
+    style.map('TCheckbutton', background=[('active', panel)])
+    style.configure('Vertical.TScrollbar', background='#d2d7e2', troughcolor=bg, borderwidth=0, arrowsize=10)
     settings = core.config()
-    outer = ttk.Frame(root, padding=22); outer.pack(fill='both', expand=True)
-    header = ttk.Frame(outer); header.pack(fill='x')
-    ttk.Label(header, text='Bol', font=('Sans', 26, 'bold'), foreground=accent).pack(side='left')
+    side = tk.Frame(root, bg=sidebar, width=218)
+    side.pack(side='left', fill='y'); side.pack_propagate(False)
+    brand = tk.Frame(side, bg=sidebar); brand.pack(fill='x', padx=24, pady=(30, 6))
+    tk.Label(brand, text='b', font=('Sans', 20, 'bold'), bg=accent, fg='white', width=2).pack(side='left')
+    tk.Label(brand, text=' bol', font=('Sans', 25, 'bold'), bg=sidebar, fg='#ffffff').pack(side='left')
+    tk.Label(side, text='YOUR VOICE WORKSPACE', font=('Sans', 8, 'bold'), bg=sidebar, fg='#7f8ba5').pack(anchor='w', padx=25, pady=(8, 28))
+    nav = tk.Frame(side, bg=sidebar); nav.pack(fill='x', padx=12)
+    tk.Frame(side, bg='#2a3042', height=1).pack(side='bottom', fill='x', padx=22, pady=(0, 18))
+    side_bottom = tk.Frame(side, bg=sidebar); side_bottom.pack(side='bottom', fill='x', padx=24, pady=18)
+    tk.Label(side_bottom, text='●  Sarvam powered', font=('Sans', 10), bg=sidebar, fg='#a9b5cc').pack(anchor='w')
+    tk.Label(side_bottom, text='Made for your Linux desktop', font=('Sans', 8), bg=sidebar, fg='#68758e').pack(anchor='w', pady=(7, 0))
+    outer = ttk.Frame(root); outer.pack(side='left', fill='both', expand=True)
+    header = ttk.Frame(outer, padding=(32, 27, 32, 21)); header.pack(fill='x')
+    ttk.Label(header, text='WORKSPACE  /  SETTINGS', foreground=muted, font=('Sans', 8, 'bold')).pack(anchor='w')
+    heading = ttk.Frame(header); heading.pack(fill='x', pady=(12, 7))
+    page_title = tk.StringVar(value='General')
+    ttk.Label(heading, textvariable=page_title, font=('Sans', 25, 'bold')).pack(side='left')
     status = tk.StringVar(value='Ready')
-    ttk.Label(header, textvariable=status, foreground=muted).pack(side='right')
-    ttk.Label(outer, text='Your voice, your words, in every app.', foreground=muted).pack(anchor='w', pady=(0, 14))
-    notebook = ttk.Notebook(outer); notebook.pack(fill='both', expand=True)
-    tabs = {}
-    for title in ['General', 'Writing', 'Vocabulary', 'Snippets', 'History', 'Shortcuts']:
-        frame = ttk.Frame(notebook, padding=16); notebook.add(frame, text=title); tabs[title] = frame
-    variables = {}
-    editors = {}
+    status_label = tk.Label(heading, textvariable=status, bg='#e8f4ee', fg='#27734a', font=('Sans', 9), padx=12, pady=6, wraplength=280, justify='left')
+    status_label.pack(side='right')
+    page_description = tk.StringVar()
+    ttk.Label(header, textvariable=page_description, foreground=muted, wraplength=650).pack(anchor='w')
+    tk.Frame(outer, bg=line, height=1).pack(fill='x')
+    # The footer stays visible while each page scrolls independently.
+    footer_shell = tk.Frame(outer, bg=panel)
+    footer_shell.pack(side='bottom', fill='x')
+    tk.Frame(footer_shell, bg=line, height=1).pack(fill='x')
+    footer = tk.Frame(footer_shell, bg=panel, padx=30, pady=16)
+    footer.pack(fill='x')
+    save_message = tk.StringVar(value='All changes saved')
+    tk.Label(footer, textvariable=save_message, bg=panel, fg=muted, font=('Sans', 9)).pack(side='left')
+    page_area = ttk.Frame(outer); page_area.pack(fill='both', expand=True)
+    page_area.rowconfigure(0, weight=1); page_area.columnconfigure(0, weight=1)
+    tabs, canvases, nav_buttons, scroll_canvases = {}, {}, {}, {}
+    descriptions = {
+        'General': 'Set up your connection, language, and recording preferences.',
+        'Writing': 'Make every result sound like you. Choose your voice and app preferences.',
+        'Vocabulary': 'Teach Bol the names, phrases, and technical terms you use every day.',
+        'Snippets': 'Turn a short spoken phrase into the text you write most often.',
+        'History': 'Find, review, and recover your recent dictation results.',
+        'Shortcuts': 'A few keys are all you need. Make them feel natural.',
+    }
+    icons = {'General':'◉', 'Writing':'✎', 'Vocabulary':'Aa', 'Snippets':'≡', 'History':'◷', 'Shortcuts':'⌘'}
+    history_refresh = [lambda: None]
+    def select_page(title):
+        page_title.set(title); page_description.set(descriptions[title])
+        for name, container in canvases.items():
+            if name == title: container.tkraise()
+        for name, button in nav_buttons.items():
+            button.configure(bg='#30334d' if name == title else sidebar,
+                             fg='#ffffff' if name == title else '#9aa6bf')
+        if title == 'History':
+            try: history_refresh[0]()
+            except Exception as error: status.set(str(error))
+    for title in descriptions:
+        page = ttk.Frame(page_area); page.grid(row=0, column=0, sticky='nsew')
+        canvas = tk.Canvas(page, bg=bg, highlightthickness=0, bd=0)
+        scroll = ttk.Scrollbar(page, orient='vertical', command=canvas.yview)
+        scroll.pack(side='right', fill='y'); canvas.pack(side='left', fill='both', expand=True)
+        canvas.configure(yscrollcommand=scroll.set)
+        frame = ttk.Frame(canvas, padding=(30, 24, 24, 24))
+        window = canvas.create_window((0, 0), window=frame, anchor='nw')
+        frame.bind('<Configure>', lambda e, c=canvas: c.configure(scrollregion=c.bbox('all')))
+        canvas.bind('<Configure>', lambda e, c=canvas, w=window: c.itemconfigure(w, width=e.width))
+        tabs[title], canvases[title], scroll_canvases[title] = frame, page, canvas
+        button = tk.Button(nav, text=f'{icons[title]:<3}  {title}', command=lambda t=title: select_page(t),
+                           anchor='w', bg=sidebar, fg='#9aa6bf', activebackground='#30334d',
+                           activeforeground='white', relief='flat', bd=0, padx=16, pady=13,
+                           font=('Sans', 11), cursor='hand2', highlightthickness=0)
+        button.pack(fill='x', pady=3); nav_buttons[title] = button
+    def wheel(event):
+        if event.widget.winfo_class() not in ['Text', 'Listbox', 'TCombobox']:
+            scroll_canvases[page_title.get()].yview_scroll(-3 if event.num == 4 else 3, 'units')
+    root.bind_all('<Button-4>', wheel)
+    root.bind_all('<Button-5>', wheel)
+    variables, editors = {}, {}
+    def dirty(*args):
+        save_message.set('You have unsaved changes')
+    def card(parent, title, description=''):
+        border = tk.Frame(parent, bg=line, padx=1, pady=1); border.pack(fill='x', pady=(0, 18))
+        body = ttk.Frame(border, style='Card.TFrame', padding=22); body.pack(fill='both', expand=True)
+        ttk.Label(body, text=title, style='Card.TLabel', font=('Sans', 12, 'bold')).pack(anchor='w')
+        if description:
+            ttk.Label(body, text=description, style='Muted.TLabel', wraplength=620).pack(anchor='w', pady=(5, 10))
+        else:
+            ttk.Frame(body, style='Card.TFrame', height=8).pack()
+        return body
     def label(parent, text):
-        ttk.Label(parent, text=text, wraplength=735).pack(anchor='w', pady=(8, 4))
+        title, _, hint = text.partition(' · ')
+        ttk.Label(parent, text=title, style='Card.TLabel', font=('Sans', 10, 'bold'), wraplength=620).pack(anchor='w', pady=(10, 5))
+        if hint:
+            ttk.Label(parent, text=hint, style='Muted.TLabel', wraplength=620).pack(anchor='w', pady=(0, 7))
+    language_names = {'unknown':'Detect automatically', 'en-IN':'English', 'hi-IN':'Hindi', 'pa-IN':'Punjabi', 'bn-IN':'Bengali', 'kn-IN':'Kannada', 'ml-IN':'Malayalam', 'mr-IN':'Marathi', 'od-IN':'Odia', 'ta-IN':'Tamil', 'te-IN':'Telugu', 'gu-IN':'Gujarati', 'as-IN':'Assamese', 'ur-IN':'Urdu', 'ne-IN':'Nepali', 'kok-IN':'Konkani', 'sa-IN':'Sanskrit', 'sd-IN':'Sindhi', 'ks-IN':'Kashmiri', 'doi-IN':'Dogri', 'brx-IN':'Bodo', 'mni-IN':'Manipuri', 'mai-IN':'Maithili', 'sat-IN':'Santali'}
+    mode_names = {'transcribe':'Original language', 'codemix':'Mixed language & script', 'translit':'Roman script', 'translate':'Translate to English', 'verbatim':'Word for word'}
     def entry(parent, key, text, choices=None, secret=False):
         label(parent, text)
         var = tk.StringVar(value=settings.get(key, '')); variables[key] = var
-        widget = ttk.Combobox(parent, textvariable=var, values=choices, state='readonly') if choices else ttk.Entry(parent, textvariable=var, show='•' if secret else '')
-        widget.pack(fill='x', pady=(0, 5))
+        var.trace_add('write', dirty)
+        row = ttk.Frame(parent, style='Card.TFrame'); row.pack(fill='x', pady=(0, 8))
+        if choices:
+            names = language_names if key == 'language' else mode_names if key == 'output_mode' else {}
+            display = tk.StringVar(value=names.get(var.get(), var.get()))
+            widget = ttk.Combobox(row, textvariable=display, values=[names.get(v, v) for v in choices], state='readonly')
+            reverse = {names.get(v, v):v for v in choices}
+            display.trace_add('write', lambda *args: var.set(reverse.get(display.get(), display.get())))
+        else:
+            widget = ttk.Entry(row, textvariable=var, show='•' if secret else '')
+        widget.pack(side='left', fill='x', expand=True)
+        if secret:
+            revealed = [False]
+            def reveal():
+                revealed[0] = not revealed[0]
+                widget.configure(show='' if revealed[0] else '•')
+                reveal_button.configure(text='Hide' if revealed[0] else 'Show')
+            reveal_button = ttk.Button(row, text='Show', command=reveal)
+            reveal_button.pack(side='right', padx=(8, 0))
         return widget
     def check(parent, key, text):
         var = tk.BooleanVar(value=settings.get(key, False)); variables[key] = var
-        ttk.Checkbutton(parent, text=text, variable=var).pack(anchor='w', pady=7)
+        var.trace_add('write', dirty)
+        title, _, hint = text.partition(' · ')
+        ttk.Checkbutton(parent, text=title, variable=var).pack(anchor='w', pady=(6, 0))
+        if hint: ttk.Label(parent, text=hint, style='Muted.TLabel', wraplength=600).pack(anchor='w', padx=24, pady=(0, 5))
     def editor(parent, key, text, value, height=6):
         label(parent, text)
-        widget = tk.Text(parent, height=height, bg=panel, fg=fg, insertbackground=accent, relief='flat', padx=10, pady=10, wrap='word', undo=True)
-        widget.pack(fill='both', expand=True, pady=(0, 8)); widget.insert('1.0', value); editors[key] = widget
+        border = tk.Frame(parent, bg=line, padx=1, pady=1); border.pack(fill='both', expand=True, pady=(0, 8))
+        widget = tk.Text(border, height=height, bg=field, fg=fg, insertbackground=accent, relief='flat',
+                         padx=12, pady=12, wrap='word', undo=True, font=('Sans', 10), spacing1=3, spacing3=3,
+                         selectbackground='#dddafa', selectforeground=fg, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(border, orient='vertical', command=widget.yview)
+        scrollbar.pack(side='right', fill='y'); widget.pack(side='left', fill='both', expand=True)
+        widget.configure(yscrollcommand=scrollbar.set)
+        widget.insert('1.0', value); widget.edit_modified(False)
+        def modified(event):
+            if widget.edit_modified():
+                if key != 'result': dirty()
+                widget.edit_modified(False)
+        widget.bind('<<Modified>>', modified)
+        editors[key] = widget
         return widget
-    general = tabs['General']
-    entry(general, 'api_key', 'Sarvam API key', secret=True)
-    entry(general, 'language', 'Speech language · unknown detects automatically', LANGUAGES)
-    entry(general, 'output_mode', 'Output · original, mixed script, Roman script, English translation, or verbatim', MODES)
+    general = card(tabs['General'], 'Connection', 'Connect your Sarvam account to start speaking.')
+    entry(general, 'api_key', 'API key', secret=True)
+    ttk.Label(general, text='Stored privately on this computer.', style='Muted.TLabel').pack(anchor='w')
+    general = card(tabs['General'], 'Speech & recording', 'Choose how Bol listens and writes.')
+    entry(general, 'language', 'Speech language', LANGUAGES)
+    entry(general, 'output_mode', 'Output style', MODES)
     entry(general, 'microphone', 'Microphone · leave empty for the PipeWire default (or enter a node name)')
     entry(general, 'record_seconds', 'Maximum recording length in seconds · 5 to 300')
+    general = card(tabs['General'], 'Workflow & privacy')
     check(general, 'auto_paste', 'Paste automatically into the original focused app')
     check(general, 'history_enabled', 'Keep the last 200 results on this computer')
     label(general, 'Audio goes to Sarvam and is deleted locally after processing. Writing features also send dictated/selected text and writing preferences to Sarvam. API usage may cost credits.')
-    writing = tabs['Writing']
+    writing = card(tabs['Writing'], 'AI writing', 'Polish your speech without changing what you mean.')
     check(writing, 'polish', 'Polish dictation with AI · remove fillers, resolve corrections, format lists')
     editor(writing, 'writing_rules', 'Writing preferences · e.g. British spelling; preserve Punjabi; keep technical terms', settings.get('writing_rules', ''), 4)
+    writing = card(tabs['Writing'], 'App preferences', 'Give your editor, email, and chat apps their own writing style.')
     editor(writing, 'profiles', 'Per-app rules · one exact app class => instruction per line', format_pairs(settings.get('profiles', {})), 5)
     def current_app():
         classes = sorted({item.get('class', '') for item in json.loads(subprocess.check_output(['hyprctl', '-j', 'clients'], text=True, timeout=3)) if item.get('class')})
         messagebox.showinfo('Open app classes', '\n'.join(classes) or 'No apps found')
     ttk.Button(writing, text='Show open app classes', command=current_app).pack(anchor='w')
-    vocabulary = tabs['Vocabulary']
+    vocabulary = card(tabs['Vocabulary'], 'Your vocabulary', 'Help recognition get your names and terminology right.')
     editor(vocabulary, 'vocabulary', 'Recognition hints · one name or technical term per line (up to 50, 64 characters each)', '\n'.join(settings.get('vocabulary', [])), 5)
+    vocabulary = card(tabs['Vocabulary'], 'Remembered corrections', 'Replace recurring mistakes with the spelling you prefer.')
     editor(vocabulary, 'corrections', 'Remembered corrections · heard phrase => preferred spelling, one per line', format_pairs(settings.get('corrections', {})), 6)
-    editor(tabs['Snippets'], 'snippets', 'Say a phrase to insert its full text · phrase => expansion\nUse \\n for line breaks. A snippet triggers only when it matches the entire dictation.', format_pairs(settings.get('snippets', {})), 16)
-    shortcuts = tabs['Shortcuts']
+    snippets = card(tabs['Snippets'], 'Say less. Write more.', 'Create reusable signatures, replies, and frequently used text.')
+    editor(snippets, 'snippets', 'Say a phrase to insert its full text · phrase => expansion\nUse \\n for line breaks. A snippet triggers only when it matches the entire dictation.', format_pairs(settings.get('snippets', {})), 16)
+    shortcuts = card(tabs['Shortcuts'], 'Keyboard shortcuts', 'Your voice workspace, one key away.')
     for key, text in [('record_key', 'Dictate'), ('cancel_key', 'Cancel / discard'), ('edit_key', 'Voice edit / draft')]:
         entry(shortcuts, key, text)
+    shortcuts = card(tabs['Shortcuts'], 'Recording behavior')
     check(shortcuts, 'hold_to_talk', 'Hold the dictation key to record; release to finish')
     label(shortcuts, 'Voice edit: select text, press the editing key, speak your instruction, then press it again. Without a selection, Bol drafts from your instruction. Selected text is sent to Sarvam.')
     label(shortcuts, 'Shortcut edits apply to Hyprland when you save. Use F1–F12, optionally with CTRL +, ALT +, SHIFT + or SUPER +. Existing non-Bol shortcuts are checked for conflicts.')
-    history = tabs['History']
+    history = card(tabs['History'], 'Recent results', 'History stays on this computer. Enable saving in General to keep up to 200 results.')
     rows = []
-    history_list = tk.Listbox(history, height=5, bg=panel, fg=fg, selectbackground='#065f46', relief='flat', exportselection=False)
+    history_list = tk.Listbox(history, height=5, bg=field, fg=fg, selectbackground='#e5e2ff', selectforeground=fg, relief='flat', exportselection=False, font=('Sans', 10), highlightthickness=1, highlightbackground=line, activestyle='none')
+    empty_history = ttk.Label(history, text='No saved results yet. Your latest result will appear when you refresh.', style='Muted.TLabel', wraplength=600)
+    empty_history.pack(anchor='w', pady=(6, 10))
     history_list.pack(fill='x')
-    result = editor(history, 'result', 'Latest result / selected history entry · edit here, then Copy', '', 8)
+    result = editor(history, 'result', 'Result preview · Review or edit the text, then copy it to any app.', '', 8)
     def show_result(event=None):
         if history_list.curselection():
             row = rows[history_list.curselection()[0]]
@@ -160,9 +290,11 @@ def settings_window(core):
             rows.extend(History(core.CONFIG).list())
             for row in rows:
                 history_list.insert('end', f'{row["created"]} · {row["app"]} · {row["result"][:65].replace(chr(10), " ")}')
+        empty_history.configure(text=f'{len(rows)} saved results · newest first' if rows else 'No saved results yet. Your latest result is still available below after dictation.')
         latest = core.request('result').get('text', '')
         if latest:
             result.delete('1.0', 'end'); result.insert('1.0', latest)
+    history_refresh[0] = refresh
     def copy():
         text = result.get('1.0', 'end-1c')
         if text:
@@ -172,6 +304,7 @@ def settings_window(core):
             if (core.CONFIG / 'history.sqlite3').exists():
                 History(core.CONFIG).clear()
             rows.clear(); history_list.delete(0, 'end'); result.delete('1.0', 'end')
+            empty_history.configure(text='Your saved history has been cleared.')
     def remember():
         old = simpledialog.askstring('Remember correction', 'What did Bol get wrong?', parent=root)
         if not old: return
@@ -181,10 +314,9 @@ def settings_window(core):
         core.save_config(data)
         editors['corrections'].delete('1.0', 'end'); editors['corrections'].insert('1.0', format_pairs(data['corrections']))
         status.set('Correction remembered')
-    buttons = ttk.Frame(history); buttons.pack(fill='x', pady=4)
+    buttons = ttk.Frame(history, style='Card.TFrame'); buttons.pack(fill='x', pady=4)
     for text, command in [('Refresh', refresh), ('Copy', copy), ('Remember correction', remember), ('Clear history', clear)]:
         ttk.Button(buttons, text=text, command=command).pack(side='left', padx=(0, 6))
-    footer = ttk.Frame(outer); footer.pack(fill='x', pady=(14, 0))
     def save():
         try:
             data = core.config()
@@ -203,21 +335,25 @@ def settings_window(core):
             if changed:
                 apply_shortcuts(data)
             core.save_config(data); settings.update(data)
-            status.set('Settings saved · ready for your next recording')
+            save_message.set('All changes saved')
+            status.set('Settings saved')
         except Exception as error:
             messagebox.showerror('Could not save', str(error))
-    ttk.Button(footer, text='Save settings', command=save).pack(side='right')
-    ttk.Button(footer, text='Cancel recording', command=lambda: core.request('cancel')).pack(side='left')
+    ttk.Button(footer, text='Save changes', style='Primary.TButton', command=save).pack(side='right')
+    ttk.Button(footer, text='Stop recording', command=lambda: core.request('cancel')).pack(side='right', padx=(0, 10))
     last_state = [None]
     def poll():
         try:
             state = core.request('status')
             if state != last_state[0]:
                 status.set(state.get('error') or (f'{state["state"]} · {state["seconds"]:.0f}s' if state['state'] == 'Recording' else state.get('outcome') or state['state']))
+                busy = state['state'] in ['Recording', 'Transcribing', 'Writing']
+                status_label.configure(bg='#fff2df' if busy else '#fde9eb' if state.get('error') else '#e8f4ee', fg='#9b6517' if busy else '#ad384a' if state.get('error') else '#27734a')
                 last_state[0] = state
         except Exception as error:
             status.set(str(error))
         root.after(600, poll)
+    select_page('General')
     root.after(100, poll)
     root.mainloop()
 
@@ -232,18 +368,23 @@ def recording_indicator(core):
         root.attributes('-type', 'notification')
     except tk.TclError:
         pass
-    root.configure(bg='#111827')
-    width, height = 300, 48
+    root.configure(bg='#171b29')
+    width, height = 340, 66
     root.geometry(f'{width}x{height}+{(root.winfo_screenwidth()-width)//2}+40')
-    label = tk.Label(root, bg='#111827', fg='#6ee7b7', font=('Sans', 12, 'bold'), padx=16, pady=12)
-    label.pack(fill='both', expand=True)
+    body = tk.Frame(root, bg='#171b29', padx=18, pady=10); body.pack(fill='both', expand=True)
+    dot = tk.Label(body, text='●', bg='#171b29', fg='#f87171', font=('Sans', 17)); dot.pack(side='left', padx=(0, 12))
+    words = tk.Frame(body, bg='#171b29'); words.pack(side='left', fill='both', expand=True)
+    label = tk.Label(words, bg='#171b29', fg='#f3f4f6', font=('Sans', 11, 'bold'), anchor='w')
+    label.pack(fill='x')
+    hint = tk.Label(words, text=f"{core.config().get('cancel_key', 'F9')} to cancel", bg='#171b29', fg='#95a2ba', font=('Sans', 8), anchor='w'); hint.pack(fill='x', pady=(3, 0))
     root.withdraw()
     def poll():
         try:
             state = core.request('status', start=False)
             if state['state'] in ['Recording', 'Transcribing', 'Writing']:
                 text = f'● {state["mode"].title()} · {state["seconds"]:.0f}s' if state['state'] == 'Recording' else state['state'] + '…'
-                label.configure(text=text)
+                label.configure(text=text.replace('● ', ''))
+                dot.configure(fg='#f87171' if state['state'] == 'Recording' else '#a5a0ff')
                 if root.state() == 'withdrawn': root.deiconify()
             else:
                 root.withdraw()
