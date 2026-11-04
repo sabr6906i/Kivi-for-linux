@@ -10,6 +10,8 @@ cat > "$bin_dir/bol" <<EOF
 exec /usr/bin/python "$app_dir/bol.py" "\$@"
 EOF
 chmod 755 "$bin_dir/bol"
+mkdir -p "$app_dir/icons"
+install -m 644 "$(dirname "$0")"/icons/*.svg "$app_dir/icons/"
 cat > "${XDG_DATA_HOME:-$HOME/.local/share}/applications/bol-linux.desktop" <<EOF
 [Desktop Entry]
 Type=Application

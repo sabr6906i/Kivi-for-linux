@@ -10,22 +10,22 @@ from bol_features import LANGUAGES, MODES, History
 from bol_ui import parse_pairs, format_pairs, apply_shortcuts
 
 CSS = b'''
-window.bol { background: #212121; color: #ececec; font-family: 'Noto Sans', sans-serif; font-size: 13px; }
-.bol headerbar { background: #212121; box-shadow: none; border-bottom: 1px solid #303030; min-height: 40px; }
-.bol .sidebar { background: #181818; border-right: 1px solid #303030; }
+window.bol { background: #202022; color: #ececec; font-family: 'Noto Sans', sans-serif; font-size: 13px; }
+.bol headerbar { background: #202022; box-shadow: none; border-bottom: 1px solid #303030; min-height: 40px; }
+.bol .sidebar { background: #18181a; border-right: 1px solid #303030; }
 .bol .brand { font-size: 18px; font-weight: 650; color: #f5f5f5; }
 .bol .nav-heading { font-size: 11px; color: #858585; font-weight: 500; }
-.bol .nav-button { background: transparent; color: #aaa; border: none; box-shadow: none; border-radius: 8px; padding: 11px 12px; font-weight: 400; }
+.bol .nav-button { background: transparent; color: #aaa; border: none; box-shadow: none; border-radius: 7px; padding: 10px 12px; font-weight: 400; }
 .bol .nav-button:hover { background: #242424; color: #eee; }
 .bol .nav-button.selected { background: #303030; color: #f5f5f5; }
-.bol .page-title { font-size: 28px; font-weight: 650; letter-spacing: -0.6px; }
+.bol .page-title { font-size: 30px; font-weight: 600; letter-spacing: -0.6px; }
 .bol .muted { color: #929292; font-size: 12px; }
 .bol .section-title { color: #ddd; font-size: 13px; font-weight: 600; }
-.bol .group { background: #262626; border: 1px solid #383838; border-radius: 12px; }
+.bol .group { background: #262626; border: 1px solid #353537; border-radius: 10px; }
 .bol .row-title { font-weight: 500; color: #e4e4e4; }
 .bol .row-hint { font-size: 11px; color: #999; }
 .bol separator { background: #373737; min-height: 1px; }
-.bol entry, .bol passwordentry, .bol dropdown > button, .bol spinbutton { background: #303030; color: #eee; border: 1px solid #444; border-radius: 8px; box-shadow: none; min-height: 34px; }
+.bol entry, .bol passwordentry, .bol dropdown > button, .bol spinbutton { background: #2b2b2e; color: #eee; border: 1px solid #414144; border-radius: 8px; box-shadow: none; min-height: 34px; }
 .bol entry:focus-within, .bol passwordentry:focus-within { border-color: #929292; outline: none; }
 .bol passwordentry entry, .bol spinbutton entry { border: none; background: transparent; }
 .bol button { background: #303030; color: #ddd; border: 1px solid #444; border-radius: 8px; box-shadow: none; padding: 8px 12px; }
@@ -40,7 +40,7 @@ window.bol { background: #212121; color: #ececec; font-family: 'Noto Sans', sans
 .bol textview, .bol textview text { background: #262626; color: #e4e4e4; }
 .bol textview { border-radius: 8px; padding: 12px; font-size: 13px; }
 .bol .editor-frame { border: 1px solid #424242; border-radius: 9px; }
-.bol .footer { background: #212121; border-top: 1px solid #343434; }
+.bol .footer { background: #202022; border-top: 1px solid #343434; }
 .bol .status { color: #bdbdbd; font-size: 11px; }
 .bol .key { background: #292929; color: #b8b8b8; border: 1px solid #3b3b3b; border-radius: 5px; font-size: 10px; padding: 3px 6px; }
 .bol .empty { color: #868686; padding: 25px; }
@@ -54,13 +54,34 @@ window.bol { background: #212121; color: #ececec; font-family: 'Noto Sans', sans
 LANGUAGE_NAMES = dict(zip(LANGUAGES, ['Detect automatically','English','Hindi','Punjabi','Bengali','Kannada','Malayalam','Marathi','Odia','Tamil','Telugu','Gujarati','Assamese','Urdu','Nepali','Konkani','Sanskrit','Sindhi','Kashmiri','Dogri','Bodo','Manipuri','Maithili','Santali']))
 MODE_NAMES = dict(zip(MODES, ['Original language','Mixed language & script','Roman script','Translate to English','Word for word']))
 PAGES = [
-    ('General','preferences-system-symbolic','Connection, language, and recording preferences.'),
-    ('Writing','document-edit-symbolic','Choose how your words sound, wherever you work.'),
-    ('Vocabulary','accessories-dictionary-symbolic','Names and terms that should always sound like you.'),
-    ('Snippets','edit-paste-symbolic','Reusable text, just a short phrase away.'),
-    ('History','document-open-recent-symbolic','Review and recover your recent results.'),
-    ('Shortcuts','input-keyboard-symbolic','Make voice typing part of your everyday workflow.'),
+    ('General','general','Connection, language, and recording preferences.'),
+    ('Writing','writing','Writing preferences and application-specific styles.'),
+    ('Vocabulary','vocabulary','Recognition hints and preferred spellings.'),
+    ('Snippets','snippets','Expand a spoken phrase into reusable text.'),
+    ('History','history','Review and recover your recent results.'),
+    ('Shortcuts','shortcuts','Keyboard shortcuts and recording controls.'),
 ]
+
+
+ICON_DIR = Path(__file__).resolve().parent / 'icons'
+
+
+def svg_icon(name, size=18):
+    file = Gio.File.new_for_path(str(ICON_DIR / (name + '.svg')))
+    paintable = Gtk.IconPaintable.new_for_file(file, size, 1)
+    image = Gtk.Image.new_from_paintable(paintable)
+    image.set_pixel_size(size)
+    return image
+
+
+def action_button(title, icon_name):
+    button = Gtk.Button()
+    content = Gtk.Box(spacing=8)
+    content.set_halign(Gtk.Align.CENTER)
+    content.append(svg_icon(icon_name,16))
+    content.append(label(title))
+    button.set_child(content)
+    return button
 
 
 def margins(widget, value):
@@ -105,15 +126,15 @@ class Workspace:
         layout=Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         self.window.set_child(layout)
         side=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=6)
-        side.add_css_class('sidebar');side.set_size_request(218,-1);side.set_hexpand(False);layout.append(side)
+        side.add_css_class('sidebar');side.set_size_request(224,-1);side.set_hexpand(False);layout.append(side)
         brand=Gtk.Box(spacing=10);margins(brand,22)
-        icon=Gtk.Image.new_from_icon_name('audio-input-microphone-symbolic');icon.set_pixel_size(22)
+        icon=svg_icon('brand',24)
         brand.append(icon);brand.append(label('Bol','brand'));side.append(brand)
         navtitle=label('Workspace','nav-heading');navtitle.set_margin_start(22);navtitle.set_margin_top(9);navtitle.set_margin_bottom(8);side.append(navtitle)
         self.nav={}
         for title,icon_name,description in PAGES:
             button=Gtk.Button();button.add_css_class('nav-button');button.set_margin_start(10);button.set_margin_end(10)
-            row=Gtk.Box(spacing=11);image=Gtk.Image.new_from_icon_name(icon_name);image.set_pixel_size(16)
+            row=Gtk.Box(spacing=12);image=svg_icon(icon_name,18)
             row.append(image);row.append(label(title));button.set_child(row)
             button.connect('clicked',lambda b,name=title:self.select(name));side.append(button);self.nav[title]=button
         spacer=Gtk.Box();spacer.set_vexpand(True);side.append(spacer)
@@ -129,7 +150,7 @@ class Workspace:
         self.pages={}
         for title,icon_name,description in PAGES:
             scroller=Gtk.ScrolledWindow();scroller.set_policy(Gtk.PolicyType.NEVER,Gtk.PolicyType.AUTOMATIC)
-            page=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=20);margins(page,38);scroller.set_child(page)
+            page=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=20);margins(page,42);scroller.set_child(page)
             heading=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=8);heading.set_margin_bottom(9)
             heading.append(label(title,'page-title'));heading.append(label(description,'muted',True));page.append(heading)
             self.stack.add_named(scroller,title);self.pages[title]=page
@@ -137,7 +158,7 @@ class Workspace:
         inner=Gtk.Box(spacing=12);margins(inner,18);inner.set_hexpand(True);footer.append(inner)
         self.save_note=label('All changes saved','muted');self.save_note.set_hexpand(True);inner.append(self.save_note)
         self.status=label('Ready','status');self.status.set_ellipsize(3);self.status.set_max_width_chars(28);inner.append(self.status)
-        cancel=Gtk.Button(label='Cancel recording');cancel.connect('clicked',lambda b:self.action(lambda:self.core.request('cancel')));inner.append(cancel)
+        self.cancel_button=action_button('Cancel recording','cancel');cancel=self.cancel_button;cancel.set_visible(False);cancel.connect('clicked',lambda b:self.action(lambda:self.core.request('cancel')));inner.append(cancel)
         self.save_button=Gtk.Button(label='Save changes');self.save_button.add_css_class('primary');self.save_button.set_sensitive(False);self.save_button.connect('clicked',self.save);inner.append(self.save_button)
         main.append(footer)
         self.build_general();self.build_writing();self.build_vocabulary();self.build_snippets();self.build_history();self.build_shortcuts()
@@ -228,7 +249,7 @@ class Workspace:
         self.editor(group,'result','',170)
         actions=Gtk.Box(spacing=8)
         for title,callback in [('Refresh',lambda:self.refresh_history()),('Copy result',self.copy_result),('Remember correction',self.remember),('Clear history',self.clear_history)]:
-            button=Gtk.Button(label=title);button.connect('clicked',lambda b,fn=callback:self.action(fn));actions.append(button)
+            button=action_button(title,{'Refresh':'refresh','Copy result':'copy','Remember correction':'memory','Clear history':'trash'}[title]);button.connect('clicked',lambda b,fn=callback:self.action(fn));actions.append(button)
         page.append(actions)
 
     def build_shortcuts(self):
@@ -329,17 +350,21 @@ class Workspace:
         if not getattr(self,'polling',False):
             self.polling=True
             def worker():
+                busy=False
                 try:
                     state=self.core.request('status')
+                    busy=state.get('state') in ['Recording','Transcribing','Writing']
                     text=state.get('error') or (f'Recording · {state["seconds"]:.0f}s' if state['state']=='Recording' else state.get('outcome') or state['state'])
                 except Exception as error:text=str(error)
-                GLib.idle_add(self.status_update,text)
+                GLib.idle_add(self.status_update,text,busy)
             threading.Thread(target=worker,daemon=True).start()
         return True
 
-    def status_update(self,text):
+    def status_update(self,text,busy=False):
         self.polling=False
-        if self.alive:self.status.set_text(text);self.status.set_tooltip_text(text)
+        if self.alive:
+            self.status.set_text(text);self.status.set_tooltip_text(text)
+            self.cancel_button.set_visible(busy)
         return False
 
     def on_close(self,*args):

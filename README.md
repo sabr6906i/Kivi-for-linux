@@ -53,7 +53,7 @@ Keep the original text box focused and leave the selection unchanged. If the app
 
 ## Personalize
 
-Settings use a native GTK 4 workspace with neutral dark surfaces, a sidebar, and grouped controls. If GTK bindings are unavailable, Bol falls back to its Tk settings window. The recording indicator uses Tk.
+Settings use a native GTK 4 workspace with neutral dark surfaces, a sidebar, grouped controls, and a consistent set of bundled SVG line icons. If GTK bindings are unavailable, Bol falls back to its Tk settings window. The recording indicator uses Tk.
 
 Open **Bol Voice Typing** from your app launcher, or run `~/.local/bin/bol settings`.
 
