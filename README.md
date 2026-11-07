@@ -12,6 +12,8 @@ An independent Sarvam-powered voice typing and writing app for **Hyprland / Wayl
 - Global writing preferences plus exact app-class writing profiles.
 - Recognition vocabulary (up to 50 terms), remembered spelling corrections, and spoken text snippets.
 - Latest-result recovery, optional private local history capped at 200 entries, copy and clear controls.
+- Local three-second microphone check with quiet-signal and clipping detection; the sample is never uploaded.
+- Search saved history by text, app, mode or date. Export filtered history as JSON or the current result as text. New exports use owner-only permissions.
 - Microphone node selection, adjustable recording limit (5–300 seconds), and automatic paste with terminal shortcuts.
 - Shortcut configuration with conflict checking and an optional hold-to-talk mode.
 
@@ -55,13 +57,13 @@ Keep the original text box focused and leave the selection unchanged. If the app
 
 Settings use a native GTK 4 workspace with neutral dark surfaces, a sidebar, grouped controls, and a consistent set of bundled SVG line icons. If GTK bindings are unavailable, Bol falls back to its Tk settings window. The recording indicator uses Tk.
 
-Open **Bol Voice Typing** from your app launcher, or run `~/.local/bin/bol settings`.
+Open **Bol Voice Typing** from your app launcher, or run `~/.local/bin/bol settings`. Use **General → Test microphone** for a local three-second level check; it does not use API credits.
 
 - **General:** key, language, output mode, microphone node name (blank uses the PipeWire default), recording limit, paste, and local-history preference.
 - **Writing:** optional polish, global rules and per-app rules. Profiles use exact app classes, e.g. `Chatgpt => Preserve code identifiers; be concise`. The app can show currently open app classes. Writing rules apply to AI polish and voice editing, not raw dictation.
 - **Vocabulary:** one recognition hint per line. Add explicit corrections such as `sara vam => Sarvam`. Corrections match whole words/phrases and preserve unrelated text. Recognition hints go to the speech API.
 - **Snippets:** e.g. `my signature => Regards,\nSarbjeet`. Say only the trigger phrase to expand it. Use literal `\n` for line breaks.
-- **History:** refresh results, edit/copy a result, explicitly remember a correction, or clear saved history.
+- **History:** search saved results, export matching history as JSON, export the current preview as text, edit/copy a result, explicitly remember a correction, or clear saved history. History saving must be enabled in General to retain new results.
 - **Shortcuts:** customize keys, toggle hold-to-talk, and choose an editing key.
 
 ## Privacy and recovery

@@ -6,7 +6,7 @@ import gi
 
 gi.require_version('Gtk', '4.0')
 from gi.repository import Gtk, Gdk, GLib, Gio
-from bol_features import LANGUAGES, MODES, History
+from bol_features import LANGUAGES, MODES, History, audio_level
 from bol_ui import parse_pairs, format_pairs, apply_shortcuts
 
 CSS = b'''
@@ -213,6 +213,9 @@ class Workspace:
         self.choice(group,'language','Language','Choose a language or let Bol detect it.',LANGUAGES,LANGUAGE_NAMES)
         self.choice(group,'output_mode','Output style','How your speech appears as text.',MODES,MODE_NAMES)
         self.entry(group,'microphone','Microphone','Leave empty to use your system default.').set_placeholder_text('System default')
+        self.mic_test_button=action_button('Test microphone','microphone')
+        self.mic_test_button.connect('clicked',self.test_microphone)
+        self.row(group,'Microphone check','Record a three-second sample locally. No upload.',self.mic_test_button)
         duration=Gtk.SpinButton.new_with_range(5,300,5);duration.set_value(self.settings.get('record_seconds',120));duration.connect('value-changed',self.changed);self.widgets['record_seconds']=duration
         self.row(group,'Recording limit','Maximum seconds before Bol finishes automatically.',duration)
         group=self.section(page,'Workflow')
@@ -242,14 +245,19 @@ class Workspace:
 
     def build_history(self):
         page=self.pages['History'];group=self.section(page,'Recent results','History is optional. Your latest result remains available until Bol restarts.')
+        toolbar=Gtk.Box(spacing=10);margins(toolbar,12)
+        self.history_search=Gtk.SearchEntry();self.history_search.set_placeholder_text('Search text, app, or date');self.history_search.set_hexpand(True)
+        self.history_search.connect('search-changed',lambda e:self.action(lambda:self.refresh_history(False)))
+        toolbar.append(self.history_search)
+        export=action_button('Export history','export');export.connect('clicked',lambda b:self.export_results(True));toolbar.append(export);group.append(toolbar)
         self.history_list=Gtk.ListBox();self.history_list.set_selection_mode(Gtk.SelectionMode.SINGLE);self.history_list.connect('row-selected',self.history_selected)
         self.empty=label('No saved results yet.','empty');self.history_list.set_placeholder(self.empty)
         scroll=Gtk.ScrolledWindow();scroll.set_min_content_height(130);scroll.set_max_content_height(190);scroll.set_child(self.history_list);margins(scroll,8);group.append(scroll)
         group=self.section(page,'Result preview','Review or edit the text before copying.')
         self.editor(group,'result','',170)
-        actions=Gtk.Box(spacing=8)
-        for title,callback in [('Refresh',lambda:self.refresh_history()),('Copy result',self.copy_result),('Remember correction',self.remember),('Clear history',self.clear_history)]:
-            button=action_button(title,{'Refresh':'refresh','Copy result':'copy','Remember correction':'memory','Clear history':'trash'}[title]);button.connect('clicked',lambda b,fn=callback:self.action(fn));actions.append(button)
+        actions=Gtk.FlowBox();actions.set_selection_mode(Gtk.SelectionMode.NONE);actions.set_homogeneous(False);actions.set_max_children_per_line(3);actions.set_column_spacing(8);actions.set_row_spacing(8)
+        for title,callback in [('Export text',lambda:self.export_results(False)),('Refresh',lambda:self.refresh_history()),('Copy result',self.copy_result),('Remember correction',self.remember),('Clear history',self.clear_history)]:
+            button=action_button(title,{'Export text':'export','Refresh':'refresh','Copy result':'copy','Remember correction':'memory','Clear history':'trash'}[title]);button.connect('clicked',lambda b,fn=callback:self.action(fn));actions.insert(button,-1)
         page.append(actions)
 
     def build_shortcuts(self):
@@ -289,15 +297,17 @@ class Workspace:
             self.save_note.set_text('All changes saved');self.save_button.set_sensitive(False)
         except Exception as error:self.dialog('Could not save',str(error))
 
-    def refresh_history(self):
+    def refresh_history(self, load_latest=True):
         while child:=self.history_list.get_first_child():self.history_list.remove(child)
-        self.history_rows=History(self.core.CONFIG).list() if (self.core.CONFIG/'history.sqlite3').exists() else []
+        self.history_rows=History(self.core.CONFIG).list(self.history_search.get_text()) if (self.core.CONFIG/'history.sqlite3').exists() else []
         for row in self.history_rows:
             box=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=4)
             preview=label(row['result'].replace('\n',' ')[:100]);preview.set_ellipsize(3);box.append(preview)
             box.append(label(f'{row["created"]} UTC · {row["app"]}','muted'));self.history_list.append(box)
-        latest=self.core.request('result').get('text','')
-        if latest:self.buffers['result'].set_text(latest)
+        self.empty.set_text('No results match your search.' if self.history_search.get_text().strip() else 'No saved results yet.')
+        if load_latest:
+            latest=self.core.request('result').get('text','')
+            if latest:self.buffers['result'].set_text(latest)
 
     def history_selected(self,listbox,row):
         if row and row.get_index()<len(self.history_rows):self.buffers['result'].set_text(self.history_rows[row.get_index()]['result'])
@@ -305,6 +315,72 @@ class Workspace:
     def copy_result(self):
         text=self.text('result')
         if text:self.core.copy_text(text);self.status.set_text('Copied to clipboard')
+
+    def export_results(self, history=False):
+        if history:
+            data=History(self.core.CONFIG).list(self.history_search.get_text()) if (self.core.CONFIG/'history.sqlite3').exists() else []
+            if not data:
+                self.dialog('Nothing to export','No saved history matches the current search.');return
+            payload=json.dumps(data,ensure_ascii=False,indent=2)+'\n'
+        else:
+            payload=self.text('result')
+            if not payload.strip():
+                self.dialog('Nothing to export','Dictate something or select a saved result first.');return
+        chooser=Gtk.FileChooserNative.new('Export history' if history else 'Export text',self.window,Gtk.FileChooserAction.SAVE,'Export','Cancel')
+        chooser.set_current_name('bol-history.json' if history else 'bol-result.txt')
+        file_filter=Gtk.FileFilter();file_filter.set_name('JSON' if history else 'Text');file_filter.add_pattern('*.json' if history else '*.txt');chooser.add_filter(file_filter)
+        def response(dialog,result):
+            if result==Gtk.ResponseType.ACCEPT:
+                file=dialog.get_file();path=file.get_path() if file else None
+                if not path:self.dialog('Export unavailable','Choose a local folder.')
+                else:
+                    try:
+                        # Saved transcripts can contain personal text: create exports privately.
+                        import os
+                        fd=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_TRUNC,0o600)
+                        with os.fdopen(fd,'w') as output:output.write(payload)
+                        self.status.set_text('Export saved')
+                    except Exception as error:self.dialog('Could not export',str(error))
+            dialog.destroy()
+        chooser.connect('response',response);chooser.show()
+
+    def test_microphone(self,*args):
+        import subprocess
+        import signal
+        import tempfile
+        if self.core.request('status').get('state')!='Ready':
+            self.dialog('Microphone is busy','Finish or cancel your current recording first.');return
+        target=self.widgets['microphone'].get_text().strip()
+        self.mic_test_button.set_sensitive(False);self.status.set_text('Microphone check: speak for three seconds')
+        def worker():
+            process=None
+            try:
+                with tempfile.TemporaryDirectory(prefix='bol-mic-') as folder:
+                    path=Path(folder)/'test.wav'
+                    command=['pw-record','--rate=16000','--channels=1','--format=s16']
+                    if target:command+=['--target',target]
+                    process=subprocess.Popen(command+[str(path)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+                    self.mic_test_process=process
+                    try:process.wait(timeout=3)
+                    except subprocess.TimeoutExpired:
+                        process.send_signal(signal.SIGINT)
+                        try:process.wait(timeout=2)
+                        except subprocess.TimeoutExpired:process.kill();process.wait()
+                    result=audio_level(path)
+                    verdict='The signal is clipping. Reduce your microphone gain.' if result['clipping'] else 'The signal is very quiet. Move closer or raise your microphone gain.' if result['quiet'] else 'Your microphone is receiving audio at a usable level.'
+                    message=f"{verdict}\n\nPeak: {result['peak_db']} dBFS\nAverage: {result['rms_db']} dBFS\n\nThe sample was deleted. Nothing was uploaded."
+            except Exception as error:message='Could not test the microphone: '+str(error)
+            finally:
+                if process and process.poll() is None:process.kill();process.wait()
+                self.mic_test_process=None
+            GLib.idle_add(self.mic_test_finished,message)
+        threading.Thread(target=worker,daemon=True).start()
+
+    def mic_test_finished(self,message):
+        if self.alive:
+            self.mic_test_button.set_sensitive(True);self.status.set_text('Microphone check finished')
+            self.dialog('Microphone check',message)
+        return False
 
     def dialog(self,title,message):
         dialog=Gtk.MessageDialog(transient_for=self.window,modal=True,text=title,secondary_text=message,buttons=Gtk.ButtonsType.CLOSE)
@@ -369,6 +445,8 @@ class Workspace:
 
     def on_close(self,*args):
         self.alive=False
+        process=getattr(self,'mic_test_process',None)
+        if process and process.poll() is None:process.terminate()
         return False
 
 

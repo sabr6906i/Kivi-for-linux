@@ -100,10 +100,12 @@ class History:
             db.execute('INSERT INTO history(app,mode,original,result) VALUES (?,?,?,?)', (app, mode, original, result))
             db.execute('DELETE FROM history WHERE id NOT IN (SELECT id FROM history ORDER BY id DESC LIMIT 200)')
 
-    def list(self):
+    def list(self, query=""):
         with self.connect() as db:
             db.row_factory = sqlite3.Row
-            return [dict(row) for row in db.execute('SELECT * FROM history ORDER BY id DESC LIMIT 200')]
+            rows = [dict(row) for row in db.execute('SELECT * FROM history ORDER BY id DESC LIMIT 200')]
+        query = query.strip().casefold()
+        return [row for row in rows if not query or any(query in str(row.get(key, '')).casefold() for key in ['app', 'mode', 'created', 'original', 'result'])]
 
     def clear(self):
         with self.connect() as db:
@@ -111,3 +113,23 @@ class History:
             db.execute('DELETE FROM history')
             db.commit()
             db.execute('VACUUM')
+
+
+def audio_level(path):
+    """Return mono 16-bit PCM levels for a local microphone check."""
+    import math
+    import struct
+    import wave
+    with wave.open(str(path), 'rb') as audio:
+        if audio.getsampwidth() != 2:
+            raise ValueError('Microphone check expects 16-bit audio.')
+        raw = audio.readframes(audio.getnframes())
+        seconds = audio.getnframes() / audio.getframerate()
+    samples = [value[0] for value in struct.iter_unpack('<h', raw)]
+    if not samples:
+        raise ValueError('No microphone audio was recorded.')
+    peak = max(abs(value) for value in samples) / 32768
+    rms = math.sqrt(sum(value * value for value in samples) / len(samples)) / 32768
+    return {'seconds': seconds, 'peak_db': round(20 * math.log10(max(peak, 1e-8)), 1),
+            'rms_db': round(20 * math.log10(max(rms, 1e-8)), 1),
+            'clipping': peak >= .99, 'quiet': rms < .003}
