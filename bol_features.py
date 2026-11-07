@@ -11,6 +11,10 @@ import urllib.error
 LANGUAGES = ['unknown', 'en-IN', 'hi-IN', 'pa-IN', 'bn-IN', 'kn-IN', 'ml-IN', 'mr-IN', 'od-IN', 'ta-IN', 'te-IN', 'gu-IN', 'as-IN', 'ur-IN', 'ne-IN', 'kok-IN', 'sa-IN', 'sd-IN', 'ks-IN', 'doi-IN', 'brx-IN', 'mni-IN', 'mai-IN', 'sat-IN']
 MODES = ['transcribe', 'codemix', 'translit', 'translate', 'verbatim']
 DEFAULTS = {
+    'speech_provider': 'sarvam', 'writing_provider': 'sarvam',
+    'whisper_binary': '', 'whisper_model': '', 'local_speech_writing': False,
+    'speech_api_url': '', 'speech_api_model': '', 'speech_api_key': '',
+    'writing_api_url': '', 'writing_api_model': '', 'writing_api_key': '',
     'language': 'unknown', 'output_mode': 'transcribe', 'auto_paste': True,
     'polish': False, 'writing_rules': '', 'profiles': {}, 'vocabulary': [],
     'corrections': {}, 'snippets': {}, 'history_enabled': False,
@@ -60,6 +64,13 @@ def write(text, settings, app='', selection='', editing=False):
     body = json.dumps({'model': settings.get('chat_model', 'sarvam-105b'),
                        'messages': [{'role': 'system', 'content': system}, {'role': 'user', 'content': content}],
                        'max_tokens': 4096, 'temperature': 0.2}).encode()
+    if settings.get('writing_provider', 'sarvam') == 'compatible':
+        from bol_providers import chat_api
+        result = chat_api(json.loads(body), settings)
+        message = result.get('choices', [{}])[0].get('message', {}).get('content')
+        if not isinstance(message, str) or not message.strip():
+            raise RuntimeError('Writing API returned no text.')
+        return message.strip()
     request = urllib.request.Request('https://api.sarvam.ai/v1/chat/completions', data=body,
         headers={'api-subscription-key': settings['api_key'], 'Content-Type': 'application/json'})
     try:

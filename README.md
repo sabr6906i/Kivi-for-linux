@@ -1,6 +1,6 @@
 # Bol — a Linux voice workspace
 
-An independent Sarvam-powered voice typing and writing app for **Hyprland / Wayland**. Inspired by Kivi's workflow; not affiliated with Sarvam or Kivi. Requires your own Sarvam API key.
+An independent voice typing and writing app for **Hyprland / Wayland**. Inspired by Kivi's workflow; not affiliated with Sarvam or Kivi. Supports Sarvam, local whisper.cpp, and configurable compatible speech/writing APIs. Local dictation needs no API key.
 
 ## Features
 
@@ -31,9 +31,24 @@ cd Kivi-for-linux
 ~/.local/bin/bol settings
 ```
 
-Enter your API key from [Sarvam's dashboard](https://dashboard.sarvam.ai/) in **General**. Save settings. Writing features use the same key and require access to the `sarvam-105b` chat model. They consume additional API credits. Enable **Polish dictation** in Writing if desired; raw dictation remains the default.
+For Sarvam, enter your API key from [Sarvam's dashboard](https://dashboard.sarvam.ai/) in **Providers**. Save settings. Writing features use the same key and require access to the `sarvam-105b` chat model. They consume additional API credits. Enable **Polish dictation** in Writing if desired; raw dictation remains the default.
 
 The app requires Hyprland 0.55+ with the Lua configuration API. Other compositors are not currently supported. `ffmpeg` is needed for recordings longer than 25 seconds; these are split into 24-second requests and combined before writing/pasting. This is not live streaming and may have small boundary recognition errors.
+
+## Speech and writing providers
+
+Select the speech engine in **General**. Open **Providers** to configure credentials, local paths, and the writing engine. Speech and writing providers are independent, and their API keys are stored separately in your private settings file.
+
+- **Sarvam:** existing default. Your saved key and preferences are preserved. Enter the Sarvam key in Providers.
+- **Local whisper.cpp:** choose your `whisper-cli` executable and GGML model, or use **Detect installed Whisper**. The app detects an existing `~/.local/share/whisper-dictation` setup or `whisper-cli` on PATH. It runs the whole recording locally and stops inference on cancellation. No model is downloaded automatically.
+- **Compatible speech API:** enter the full multipart transcription endpoint URL, model ID, and its own key. The response must contain a JSON `text` field. For example, [Groq's speech endpoint](https://console.groq.com/docs/speech-to-text) is `https://api.groq.com/openai/v1/audio/transcriptions`, with model `whisper-large-v3-turbo`.
+- **Compatible writing API:** enter the full `chat/completions` URL, model ID, and its own key. The server must accept `model`, `messages`, `temperature`, and `max_tokens`, and return `choices[0].message.content`. HTTPS is required for remote APIs; unauthenticated HTTP endpoints on localhost are supported for local servers.
+
+Local Whisper's `.en` models are English-only. Select **English** or **Detect automatically** for `ggml-small.en.bin`. To dictate Punjabi or other languages, choose a multilingual Whisper model instead. Local Whisper supports original-language transcription and English translation; mixed-script and Roman transliteration remain Sarvam features. Compatible speech endpoints currently use transcription only.
+
+With local speech, **AI writing with local speech** is **off by default**, even if Polish was previously enabled. This keeps ordinary local dictation offline. Enable it explicitly in Providers to use polish or voice editing with your chosen writing endpoint. This may send text off-device if that endpoint is remote. Local corrections, snippets, clipboard insertion and history continue to work without network access.
+
+The compatible APIs have been tested against a local protocol fixture; individual cloud providers may differ in supported models and options. There is no silent fallback from local to cloud.
 
 ## Shortcuts
 
@@ -59,7 +74,8 @@ Settings use a native GTK 4 workspace with neutral dark surfaces, a sidebar, gro
 
 Open **Bol Voice Typing** from your app launcher, or run `~/.local/bin/bol settings`. Use **General → Test microphone** for a local three-second level check; it does not use API credits.
 
-- **General:** key, language, output mode, microphone node name (blank uses the PipeWire default), recording limit, paste, and local-history preference.
+- **General:** speech engine, language, output mode, microphone node name (blank uses the PipeWire default), recording limit, paste, and local-history preference.
+- **Providers:** Sarvam key, local Whisper paths, compatible API endpoints and separate keys, and the local-speech writing opt-in.
 - **Writing:** optional polish, global rules and per-app rules. Profiles use exact app classes, e.g. `Chatgpt => Preserve code identifiers; be concise`. The app can show currently open app classes. Writing rules apply to AI polish and voice editing, not raw dictation.
 - **Vocabulary:** one recognition hint per line. Add explicit corrections such as `sara vam => Sarvam`. Corrections match whole words/phrases and preserve unrelated text. Recognition hints go to the speech API.
 - **Snippets:** e.g. `my signature => Regards,\nSarbjeet`. Say only the trigger phrase to expand it. Use literal `\n` for line breaks.
@@ -68,7 +84,7 @@ Open **Bol Voice Typing** from your app launcher, or run `~/.local/bin/bol setti
 
 ## Privacy and recovery
 
-Audio goes to Sarvam for speech recognition. AI polish sends the dictated text and writing rules to Sarvam. Voice editing also sends the text explicitly copied from your selection. There is no automatic screen capture or background reading of app contents.
+Audio goes to the selected speech API for cloud recognition. With local whisper.cpp, audio stays on your computer. AI polish sends the dictated text and writing rules to Sarvam. Voice editing also sends the text explicitly copied from your selection. There is no automatic screen capture or background reading of app contents.
 
 Settings live at `~/.config/bol-linux/settings.json`, including the API key, with owner-only file permissions. Temporary audio is deleted after processing. History is **off by default**. When enabled it stores the original transcript, final text, app class and UTC timestamp in an owner-only `history.sqlite3`, retaining the newest 200 results. Disabling history stops future storage; use Clear history to remove existing entries. Text is also placed on the clipboard and may be retained by your clipboard manager.
 
@@ -94,7 +110,7 @@ python -m py_compile kivi_linux.py bol_features.py bol_ui.py
 bash -n install.sh
 ```
 
-`kivi_linux.py` provides recording, IPC and insertion. `bol_features.py` handles vocabulary/snippets, writing API and SQLite history. `bol_gtk.py` contains the native GTK settings workspace. `bol_ui.py` provides the fallback settings window, shortcut helpers, and recording indicator. The app uses Python's standard library plus Tk and system executables.
+`kivi_linux.py` provides recording, IPC and insertion. `bol_features.py` handles vocabulary/snippets, writing API and SQLite history. `bol_providers.py` implements local whisper.cpp and compatible API adapters. `bol_gtk.py` contains the native GTK settings workspace. `bol_ui.py` provides the fallback settings window, shortcut helpers, and recording indicator. The app uses Python's standard library plus Tk and system executables.
 
 `bol doctor` checks dependencies, and `bol status` shows recording/processing state. The daemon starts on demand. After an upgrade, stop the existing daemon before starting the new version so it imports the updated modules. It handles SIGTERM by stopping its recorder and cleaning temporary audio.
 

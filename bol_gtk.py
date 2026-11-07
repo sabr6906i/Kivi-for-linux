@@ -7,6 +7,7 @@ import gi
 gi.require_version('Gtk', '4.0')
 from gi.repository import Gtk, Gdk, GLib, Gio
 from bol_features import LANGUAGES, MODES, History, audio_level
+from bol_providers import SPEECH_PROVIDERS, WRITING_PROVIDERS, detect_whisper, validate_speech
 from bol_ui import parse_pairs, format_pairs, apply_shortcuts
 
 CSS = b'''
@@ -55,6 +56,7 @@ LANGUAGE_NAMES = dict(zip(LANGUAGES, ['Detect automatically','English','Hindi','
 MODE_NAMES = dict(zip(MODES, ['Original language','Mixed language & script','Roman script','Translate to English','Word for word']))
 PAGES = [
     ('General','general','Connection, language, and recording preferences.'),
+    ('Providers','providers','Choose local models and connect speech or writing APIs.'),
     ('Writing','writing','Writing preferences and application-specific styles.'),
     ('Vocabulary','vocabulary','Recognition hints and preferred spellings.'),
     ('Snippets','snippets','Expand a spoken phrase into reusable text.'),
@@ -161,8 +163,8 @@ class Workspace:
         self.cancel_button=action_button('Cancel recording','cancel');cancel=self.cancel_button;cancel.set_visible(False);cancel.connect('clicked',lambda b:self.action(lambda:self.core.request('cancel')));inner.append(cancel)
         self.save_button=Gtk.Button(label='Save changes');self.save_button.add_css_class('primary');self.save_button.set_sensitive(False);self.save_button.connect('clicked',self.save);inner.append(self.save_button)
         main.append(footer)
-        self.build_general();self.build_writing();self.build_vocabulary();self.build_snippets();self.build_history();self.build_shortcuts()
-        self.loading=False;self.select('General');self.window.present()
+        self.build_general();self.build_providers();self.build_writing();self.build_vocabulary();self.build_snippets();self.build_history();self.build_shortcuts()
+        self.update_provider_sections();self.loading=False;self.select('General');self.window.present()
         GLib.timeout_add(800,self.poll)
 
     def section(self,page,title,description=None):
@@ -207,8 +209,9 @@ class Workspace:
         self.buffers[key]=buffer;scroller.set_child(view);group.append(scroller);return buffer
 
     def build_general(self):
-        page=self.pages['General'];group=self.section(page,'Account')
-        self.entry(group,'api_key','Sarvam API key','Stored privately on this computer.',True)
+        page=self.pages['General'];group=self.section(page,'Speech recognition')
+        self.choice(group,'speech_provider','Speech engine','Configure keys and model paths in Providers.',SPEECH_PROVIDERS,{'sarvam':'Sarvam cloud','whispercpp':'Local whisper.cpp','compatible':'Compatible speech API'})
+        self.widgets['speech_provider'].connect('notify::selected',lambda *args:self.update_provider_sections())
         group=self.section(page,'Speech')
         self.choice(group,'language','Language','Choose a language or let Bol detect it.',LANGUAGES,LANGUAGE_NAMES)
         self.choice(group,'output_mode','Output style','How your speech appears as text.',MODES,MODE_NAMES)
@@ -221,7 +224,47 @@ class Workspace:
         group=self.section(page,'Workflow')
         self.toggle(group,'auto_paste','Automatic paste','Insert the result into your original focused app.')
         self.toggle(group,'history_enabled','Save history','Keep up to 200 results locally on this computer.')
-        page.append(label('Audio is processed by Sarvam. Writing features also send your text and preferences. Your API usage may consume credits.','muted',True))
+        page.append(label('Local Whisper keeps audio on your computer. Cloud engines send audio to the selected provider. AI writing sends text and preferences to its configured endpoint.','muted',True))
+
+    def build_providers(self):
+        page=self.pages['Providers'];self.provider_sections={}
+        group=self.section(page,'Sarvam credentials','Used for Sarvam speech recognition and Sarvam AI writing.')
+        self.entry(group,'api_key','Sarvam API key','Your existing key is preserved.',True)
+        self.provider_sections['sarvam']=group.get_parent()
+        group=self.section(page,'Local whisper.cpp','Use an existing whisper-cli build and downloaded GGML model. No model downloads happen automatically.')
+        self.entry(group,'whisper_binary','Whisper executable','Leave blank to auto-detect your existing installation.')
+        self.entry(group,'whisper_model','Model file','The detected small.en model is English-only. Punjabi requires a multilingual model.')
+        button=Gtk.Button(label='Detect installed Whisper');button.connect('clicked',self.detect_local)
+        self.row(group,'Find local installation','Fill the paths from your existing Whisper setup.',button)
+        self.provider_sections['local']=group.get_parent()
+        group=self.section(page,'Compatible speech API','A multipart audio/transcriptions endpoint returning a JSON text field. Keys stay separate from Sarvam.')
+        self.entry(group,'speech_api_url','Endpoint URL','For example: https://api.groq.com/openai/v1/audio/transcriptions')
+        self.entry(group,'speech_api_model','Speech model','For example: whisper-large-v3-turbo')
+        self.entry(group,'speech_api_key','API key','Leave blank only for a server that does not require authentication.',True)
+        self.provider_sections['speech_api']=group.get_parent()
+        group=self.section(page,'AI writing provider','Used for polish and voice editing, independently of speech recognition.')
+        self.choice(group,'writing_provider','Writing engine','Select the API that should receive writing requests.',WRITING_PROVIDERS,{'sarvam':'Sarvam','compatible':'Compatible chat API'})
+        self.widgets['writing_provider'].connect('notify::selected',lambda *args:self.update_provider_sections())
+        group=self.section(page,'Compatible writing API','A JSON chat/completions endpoint. Use your cloud provider or a local compatible server.')
+        self.entry(group,'writing_api_url','Endpoint URL','Enter the complete chat/completions URL. Localhost HTTP is supported.')
+        self.entry(group,'writing_api_model','Writing model','Enter the model ID served by your endpoint.')
+        self.entry(group,'writing_api_key','API key','Optional for a local server without authentication.',True)
+        self.provider_sections['writing_api']=group.get_parent()
+        group=self.section(page,'Local speech privacy')
+        self.toggle(group,'local_speech_writing','AI writing with local speech','Allows local Whisper text to reach the chosen writing endpoint. Off keeps local dictation offline.')
+
+    def update_provider_sections(self):
+        if not hasattr(self,'provider_sections') or 'writing_provider' not in self.widgets:return
+        speech=SPEECH_PROVIDERS[self.widgets['speech_provider'].get_selected()]
+        writing=WRITING_PROVIDERS[self.widgets['writing_provider'].get_selected()]
+        for name,visible in {'sarvam':speech=='sarvam' or writing=='sarvam','local':speech=='whispercpp','speech_api':speech=='compatible','writing_api':writing=='compatible'}.items():
+            self.provider_sections[name].set_visible(visible)
+
+    def detect_local(self,*args):
+        binary,model=detect_whisper()
+        self.widgets['whisper_binary'].set_text(binary);self.widgets['whisper_model'].set_text(model)
+        if not binary or not model:self.dialog('Whisper detection','Choose your whisper-cli and GGML model paths manually.')
+        elif '.en.' in model:self.dialog('English model detected','Your model supports English only. Select English or automatic detection in General. Use a multilingual model for Punjabi.')
 
     def build_writing(self):
         page=self.pages['Writing'];group=self.section(page,'Dictation')
@@ -289,6 +332,7 @@ class Workspace:
                 else:data[key]=widget.get_text().strip()
             terms=[v.strip() for v in self.text('vocabulary').splitlines() if v.strip()]
             if len(terms)>50 or any(len(v)>64 for v in terms):raise ValueError('Use up to 50 vocabulary terms, each at most 64 characters.')
+            if data.get('speech_provider') in ['whispercpp','compatible']:validate_speech(data)
             data['vocabulary']=terms;data['writing_rules']=self.text('writing_rules').strip()
             for key in ['profiles','corrections','snippets']:data[key]=parse_pairs(self.text(key))
             if any(data.get(k)!=self.settings.get(k) for k in ['record_key','cancel_key','edit_key','hold_to_talk']):apply_shortcuts(data)

@@ -20,6 +20,7 @@ import urllib.error
 import uuid
 
 from bol_features import DEFAULTS, History, expand, write
+from bol_providers import validate_speech, transcribe_local, transcribe_api
 
 CONFIG = Path(os.environ.get('XDG_CONFIG_HOME', str(Path.home() / '.config'))) / 'bol-linux'
 RUNTIME = Path(os.environ.get('XDG_RUNTIME_DIR', f'/tmp/bol-{os.getuid()}')) / 'bol-linux'
@@ -67,6 +68,8 @@ def multipart(audio, language, mode="transcribe", vocabulary=None):
 
 
 def transcribe_one(path, settings):
+    if settings.get('speech_provider') == 'compatible':
+        return transcribe_api(path, settings)
     body, boundary = multipart(path.read_bytes(), settings.get('language', 'unknown'), settings.get('output_mode', 'transcribe'), settings.get('vocabulary', []))
     request = urllib.request.Request('https://api.sarvam.ai/speech-to-text', data=body,
         headers={'api-subscription-key': settings['api_key'], 'Content-Type': f'multipart/form-data; boundary={boundary}'})
@@ -81,7 +84,9 @@ def transcribe_one(path, settings):
     return text
 
 
-def transcribe(path, settings, cancelled=lambda: False):
+def transcribe(path, settings, cancelled=lambda: False, on_process=lambda p: None):
+    if settings.get('speech_provider') == 'whispercpp':
+        return transcribe_local(path, settings, cancelled, on_process)
     with wave.open(str(path), 'rb') as audio:
         seconds = audio.getnframes() / audio.getframerate()
     if cancelled():
@@ -145,6 +150,7 @@ class Service:
         self.state = 'Ready'
         self.error = ''
         self.recorder = None
+        self.inference_process = None
         self.directory = None
         self.target = ''
         self.app = ''
@@ -176,6 +182,8 @@ class Service:
     def cancel(self, silent=False):
         self.generation += 1
         self.stop_recorder()
+        if self.inference_process and self.inference_process.poll() is None:
+            self.inference_process.terminate()
         if self.directory:
             self.directory.cleanup()
             self.directory = None
@@ -211,8 +219,12 @@ class Service:
                     self.finish(self.generation)
                 return self.status()
             settings = config()
-            if not settings.get('api_key'):
-                self.error = 'Open Bol settings and save your Sarvam API key first.'
+            try:
+                validate_speech(settings)
+                if command == 'edit' and settings.get('speech_provider') == 'whispercpp' and not settings.get('local_speech_writing'):
+                    raise ValueError('Enable AI writing with local speech in Writing settings to use voice editing.')
+            except ValueError as error:
+                self.error = str(error)
                 notify(self.error)
                 return self.status()
             for binary in ['pw-record', 'wl-copy', 'wl-paste', 'hyprctl']:
@@ -258,13 +270,20 @@ class Service:
         try:
             if not path.exists() or path.stat().st_size < 100:
                 raise RuntimeError('No audio recorded. Check your microphone in PipeWire.')
-            original = transcribe(path, settings, cancelled=lambda: generation != self.generation)
+            def local_process(process):
+                with self.lock:
+                    if generation == self.generation:
+                        self.inference_process = process
+                    elif process and process.poll() is None:
+                        process.terminate()
+            original = transcribe(path, settings, cancelled=lambda: generation != self.generation, on_process=local_process)
             with self.lock:
                 if generation != self.generation:
                     return
             text, snippet = expand(original, settings)
             warning = ''
-            if mode == 'edit' or (settings.get('polish') and not snippet):
+            writing_allowed = settings.get('speech_provider') != 'whispercpp' or settings.get('local_speech_writing', False)
+            if mode == 'edit' or (settings.get('polish') and not snippet and writing_allowed):
                 with self.lock:
                     if generation != self.generation:
                         return
@@ -395,6 +414,12 @@ def main():
         for name in ['python', 'pw-record', 'wl-copy', 'wl-paste', 'hyprctl', 'notify-send']:
             print(f'{name}: {shutil.which(name) or "MISSING"}')
         print('API key:', 'configured' if config().get('api_key') else 'not configured')
+        print('Speech provider:', config().get('speech_provider', 'sarvam'))
+        print('Writing provider:', config().get('writing_provider', 'sarvam'))
+        from bol_providers import detect_whisper
+        binary, model = detect_whisper()
+        print('Detected whisper.cpp:', binary or 'not found')
+        print('Detected Whisper model:', model or 'not found')
         print('Session:', os.environ.get('XDG_SESSION_TYPE', 'unknown'))
     else:
         print(json.dumps(request(args.command)))
