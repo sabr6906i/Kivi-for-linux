@@ -28,17 +28,17 @@ window.bol { background: #090909; color: #ececec; font-family: 'Noto Sans', sans
 .bol .row-hint { font-size: 11px; color: #999; }
 .bol separator { background: #292929; min-height: 1px; }
 .bol entry, .bol passwordentry, .bol dropdown > button, .bol spinbutton { background: #191919; color: #eee; border: 1px solid #333333; border-radius: 8px; box-shadow: none; min-height: 34px; }
-.bol entry:focus-within, .bol passwordentry:focus-within { border-color: #929292; outline: none; }
+.bol entry:focus-within, .bol passwordentry:focus-within { border-color: #83b8ff; outline: none; }
 .bol passwordentry entry, .bol spinbutton entry { border: none; background: transparent; }
 .bol button { background: #242424; color: #ddd; border: 1px solid #333; border-radius: 8px; box-shadow: none; padding: 8px 12px; transition: background-color 120ms ease-in-out, border-color 120ms ease-in-out; }
 .bol button:hover { background: #303030; }
-.bol button.primary { background: #ededed; color: #171717; border-color: #ededed; font-weight: 600; }
-.bol button.primary:hover { background: white; }
+.bol button.primary { background: #95bfff; color: #101823; border-color: #95bfff; font-weight: 600; }
+.bol button.primary:hover { background: #b4d2ff; border-color: #b4d2ff; }
 .bol button.primary:disabled { background: #222222; color: #858585; border-color: #222222; }
 .bol switch { background: #505050; border: none; min-width: 38px; min-height: 22px; }
-.bol switch:checked { background: #e0e0e0; }
+.bol switch:checked { background: #83b8ff; }
 .bol switch slider { background: #bdbdbd; border: none; box-shadow: none; }
-.bol switch:checked slider { background: #252525; }
+.bol switch:checked slider { background: #142039; }
 .bol textview, .bol textview text { background: #141414; color: #e4e4e4; }
 .bol textview { border-radius: 8px; padding: 12px; font-size: 13px; }
 .bol .editor-frame { border: 1px solid #424242; border-radius: 9px; }
@@ -53,7 +53,7 @@ window.bol { background: #090909; color: #ececec; font-family: 'Noto Sans', sans
 .bol .history-toolbar { background: #111111; border: 1px solid #292929; border-radius: 10px; padding: 8px; }
 .bol .filter { background: transparent; border-color: transparent; color: #939393; padding: 7px 12px; }
 .bol button.filter:checked label { color: #f3f3f3; }
-.bol .filter:checked { background: #2a2a2a; color: #f3f3f3; border-color: #3a3a3a; }
+.bol .filter:checked { background: #182b43; color: #b6d5ff; border-color: #34577f; }
 .bol .transcript { background: #141414; border: 1px solid #292929; border-radius: 12px; padding: 19px; }
 .bol .transcript:hover { border-color: #464646; background: #181818; }
 .bol .transcript-text { font-size: 14px; color: #e4e4e4; line-height: 1.6; }
@@ -63,6 +63,27 @@ window.bol { background: #090909; color: #ececec; font-family: 'Noto Sans', sans
 .bol .quiet { background: transparent; border-color: transparent; color: #a0a0a0; padding: 6px 8px; }
 .bol .quiet:hover { background: #292929; border-color: #3b3b3b; color: white; }
 .bol .history-empty { background: #101010; border: 1px dashed #333333; border-radius: 12px; padding: 42px; }
+.bol .nav-button.nav-general.selected { background: #152235; border: 1px solid #2c4666; color: #83b8ff; }
+.bol .nav-button.nav-general.selected label { color: #83b8ff; }
+.bol .nav-button.nav-providers.selected { background: #251b36; border: 1px solid #493764; color: #bca1ff; }
+.bol .nav-button.nav-providers.selected label { color: #bca1ff; }
+.bol .nav-button.nav-writing.selected { background: #2d2317; border: 1px solid #59432a; color: #f0bb72; }
+.bol .nav-button.nav-writing.selected label { color: #f0bb72; }
+.bol .nav-button.nav-vocabulary.selected { background: #152a21; border: 1px solid #2b5140; color: #83d6ae; }
+.bol .nav-button.nav-vocabulary.selected label { color: #83d6ae; }
+.bol .nav-button.nav-snippets.selected { background: #2d1b29; border: 1px solid #58354d; color: #f39ec9; }
+.bol .nav-button.nav-snippets.selected label { color: #f39ec9; }
+.bol .nav-button.nav-history.selected { background: #15292d; border: 1px solid #2c4f56; color: #7fd7e0; }
+.bol .nav-button.nav-history.selected label { color: #7fd7e0; }
+.bol .nav-button.nav-shortcuts.selected { background: #222235; border: 1px solid #414267; color: #b5b7f6; }
+.bol .nav-button.nav-shortcuts.selected label { color: #b5b7f6; }
+.bol .tag-dictation { background: #142b23; color: #9eddbc; border-color: #2b4b3c; }
+.bol .tag-edit { background: #261d35; color: #c5aff4; border-color: #493762; }
+.bol .tag-unsaved { background: #302417; color: #e6bf89; border-color: #58432a; }
+.bol .saving-on { background: #142b23; color: #9eddbc; border-color: #2b4b3c; }
+.bol .saving-off { background: #302417; color: #e6bf89; border-color: #58432a; }
+.bol .destructive { color: #f0a0ae; }
+.bol .destructive:hover { background: #351b23; border-color: #623541; }
 .bol scrollbar slider { background: #515151; min-width: 5px; border-radius: 4px; }
 '''
 
@@ -158,7 +179,7 @@ class Workspace:
         navtitle=label('Workspace','nav-heading');navtitle.set_margin_start(22);navtitle.set_margin_top(9);navtitle.set_margin_bottom(8);side.append(navtitle)
         self.nav={}
         for title,icon_name,description in PAGES:
-            button=Gtk.Button();button.add_css_class('nav-button');button.set_margin_start(10);button.set_margin_end(10)
+            button=Gtk.Button();button.add_css_class('nav-button');button.add_css_class('nav-'+title.lower());button.set_margin_start(10);button.set_margin_end(10)
             row=Gtk.Box(spacing=12);image=svg_icon(icon_name,18)
             row.append(image);row.append(label(title));button.set_child(row)
             button.connect('clicked',lambda b,name=title:self.select(name));side.append(button);self.nav[title]=button
@@ -344,7 +365,7 @@ class Workspace:
         scratch=Gtk.TextBuffer();self.buffers['result']=scratch
         bottom=Gtk.Box(spacing=8)
         self.history_privacy=label('Stored on this device. Audio is not retained.','muted',True);self.history_privacy.set_hexpand(True);bottom.append(self.history_privacy)
-        clear=Gtk.Button(label='Clear saved history');clear.add_css_class('quiet');clear.connect('clicked',lambda b:self.clear_history());bottom.append(clear);page.append(bottom)
+        clear=Gtk.Button(label='Clear saved history');clear.add_css_class('quiet');clear.add_css_class('destructive');clear.connect('clicked',lambda b:self.clear_history());bottom.append(clear);page.append(bottom)
 
     def history_search_changed(self,*args):
         source=getattr(self,'history_search_timer',None)
@@ -366,7 +387,10 @@ class Workspace:
         self.history_rows=filter_history(self.history_all,query,self.history_kind)
         saved=len(self.history_all);words=sum(len(row['result'].split()) for row in self.history_all)
         self.history_summary.set_text(f'{saved:,} saved transcripts  ·  {words:,} words')
-        self.history_saving.set_text('Saving on' if self.core.config().get('history_enabled') else 'Saving off')
+        saving=bool(self.core.config().get('history_enabled'))
+        self.history_saving.set_text('Saving on' if saving else 'Saving off')
+        self.history_saving.remove_css_class('saving-off' if saving else 'saving-on')
+        self.history_saving.add_css_class('saving-on' if saving else 'saving-off')
         self.history_count.set_text(f'{len(self.history_rows)} result'+('' if len(self.history_rows)==1 else 's'))
         latest=self.history_latest
         memory_row=None
@@ -393,8 +417,10 @@ class Workspace:
         card=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=14);card.add_css_class('transcript')
         top=Gtk.Box(spacing=9)
         app=label(row.get('app') or 'Unknown app','transcript-meta');app.set_ellipsize(3);app.set_hexpand(True);top.append(app)
-        top.append(label({'edit':'Voice edit','dictate':'Dictation'}.get(row.get('mode'),'Session result'),'tag'))
-        if memory:top.append(label('Not saved','tag'))
+        kind=label({'edit':'Voice edit','dictate':'Dictation'}.get(row.get('mode'),'Session result'),'tag')
+        kind.add_css_class('tag-edit' if row.get('mode')=='edit' else 'tag-dictation');top.append(kind)
+        if memory:
+            unsaved=label('Not saved','tag');unsaved.add_css_class('tag-unsaved');top.append(unsaved)
         _,clock=history_date(row.get('created',''))
         if clock:top.append(label(clock,'transcript-meta'))
         card.append(top)
