@@ -13,110 +13,110 @@ from bol_audio import synthesize, TTS_LANGUAGES, TTS_VOICES
 from bol_ui import parse_pairs, format_pairs, apply_shortcuts
 
 CSS = b'''
-window.bol { background: #090909; color: #ececec; font-family: 'Noto Sans', sans-serif; font-size: 13px; }
-.bol headerbar { background: #090909; box-shadow: none; border-bottom: 1px solid #242424; min-height: 40px; }
-.bol .sidebar { background: #0c0c0c; border-right: 1px solid #242424; }
-.bol .brand { font-size: 18px; font-weight: 700; color: #8cf3c2; }
-.bol .nav-heading { font-size: 11px; color: #858585; font-weight: 500; }
-.bol .nav-button { background: transparent; color: #aaa; border: none; box-shadow: none; border-radius: 7px; padding: 10px 12px; font-weight: 550; transition: background-color 120ms ease-in-out, color 120ms ease-in-out; }
-.bol .nav-button:hover { background: #242424; color: #eee; }
-.bol .nav-button.selected { background: #242424; color: #f5f5f5; }
-.bol .page-title { font-size: 30px; font-weight: 700; letter-spacing: -0.6px; }
-.bol .muted { color: #929292; font-size: 12px; }
-.bol .section-title { color: #ddd; font-size: 13px; font-weight: 600; }
-.bol .group { background: #141414; border: 1px solid #292929; border-radius: 10px; }
-.bol .row-title { font-weight: 500; color: #e4e4e4; }
-.bol .row-hint { font-size: 11px; color: #999; }
-.bol separator { background: #292929; min-height: 1px; }
-.bol entry, .bol passwordentry, .bol dropdown > button, .bol spinbutton { background: #191919; color: #eee; border: 1px solid #333333; border-radius: 8px; box-shadow: none; min-height: 34px; }
-.bol entry:focus-within, .bol passwordentry:focus-within { border-color: #4da3ff; outline: none; }
-.bol passwordentry entry, .bol spinbutton entry { border: none; background: transparent; }
-.bol button { background: #242424; color: #ddd; border: 1px solid #333; border-radius: 8px; box-shadow: none; padding: 8px 12px; transition: background-color 120ms ease-in-out, border-color 120ms ease-in-out; }
-.bol button:hover { background: #303030; }
-.bol button.primary { background: #65b0ff; color: #101823; border-color: #65b0ff; font-weight: 600; }
-.bol button.primary:hover { background: #91c7ff; border-color: #91c7ff; }
-.bol button.primary:disabled { background: #222222; color: #858585; border-color: #222222; }
-.bol switch { background: #505050; border: none; min-width: 38px; min-height: 22px; }
-.bol switch:checked { background: #4da3ff; }
-.bol switch slider { background: #bdbdbd; border: none; box-shadow: none; }
-.bol switch:checked slider { background: #142039; }
-.bol textview, .bol textview text { background: #141414; color: #e4e4e4; }
-.bol textview { border-radius: 8px; padding: 12px; font-size: 13px; }
-.bol .editor-frame { border: 1px solid #424242; border-radius: 9px; }
-.bol .footer { background: #090909; border-top: 1px solid #252525; }
-.bol .status { color: #bdbdbd; font-size: 11px; }
-.bol .key { background: #292929; color: #b8b8b8; border: 1px solid #303030; border-radius: 5px; font-size: 10px; padding: 3px 6px; }
-.bol .empty { color: #868686; padding: 25px; }
-.bol listbox { background: transparent; }
-.bol listbox row { padding: 10px; border-radius: 7px; }
-.bol listbox row:selected { background: #303030; }
-.bol popover contents { background: #242424; color: #eee; border: 1px solid #353535; border-radius: 10px; }
-.bol .history-toolbar { background: #111111; border: 1px solid #292929; border-radius: 10px; padding: 8px; }
-.bol .filter { background: transparent; border-color: transparent; color: #939393; padding: 7px 12px; }
-.bol button.filter:checked label { color: #f3f3f3; }
-.bol .filter:checked { background: #182b43; color: #b6d5ff; border-color: #34577f; }
-.bol .transcript { background: #141414; border: 1px solid #292929; border-radius: 12px; padding: 19px; }
-.bol .transcript:hover { border-color: #464646; background: #181818; }
-.bol .transcript-text { font-size: 14px; color: #e4e4e4; line-height: 1.6; }
-.bol .transcript-meta { color: #8c8c8c; font-size: 11px; }
-.bol .date-heading { color: #a0a0a0; font-size: 11px; font-weight: 600; margin-top: 12px; margin-bottom: 2px; }
-.bol .tag { background: #232323; border: 1px solid #333333; border-radius: 5px; padding: 3px 7px; color: #aaa; font-size: 10px; }
-.bol .quiet { background: transparent; border-color: transparent; color: #a0a0a0; padding: 6px 8px; }
-.bol .quiet:hover { background: #292929; border-color: #3b3b3b; color: white; }
-.bol .history-empty { background: #101010; border: 1px dashed #333333; border-radius: 12px; padding: 42px; }
-.bol .nav-button.nav-general.selected { background: #152235; border: 1px solid #2c4666; color: #4da3ff; }
-.bol .nav-button.nav-general.selected label { color: #4da3ff; }
-.bol .nav-button.nav-providers.selected { background: #251b36; border: 1px solid #493764; color: #ad78ff; }
-.bol .nav-button.nav-providers.selected label { color: #ad78ff; }
-.bol .nav-button.nav-writing.selected { background: #2d2317; border: 1px solid #59432a; color: #ffb53f; }
-.bol .nav-button.nav-writing.selected label { color: #ffb53f; }
-.bol .nav-button.nav-vocabulary.selected { background: #152a21; border: 1px solid #2b5140; color: #43e3a1; }
-.bol .nav-button.nav-vocabulary.selected label { color: #43e3a1; }
-.bol .nav-button.nav-snippets.selected { background: #2d1b29; border: 1px solid #58354d; color: #ff72c2; }
-.bol .nav-button.nav-snippets.selected label { color: #ff72c2; }
-.bol .nav-button.nav-history.selected { background: #15292d; border: 1px solid #2c4f56; color: #39dcea; }
-.bol .nav-button.nav-history.selected label { color: #39dcea; }
-.bol .nav-button.nav-shortcuts.selected { background: #222235; border: 1px solid #414267; color: #9b92ff; }
-.bol .nav-button.nav-shortcuts.selected label { color: #9b92ff; }
-.bol .tag-dictation { background: #142b23; color: #65efaf; border-color: #2b4b3c; }
-.bol .tag-edit { background: #261d35; color: #c29aff; border-color: #493762; }
-.bol .tag-unsaved { background: #302417; color: #ffd071; border-color: #58432a; }
-.bol .saving-on { background: #142b23; color: #65efaf; border-color: #2b4b3c; }
-.bol .saving-off { background: #302417; color: #ffd071; border-color: #58432a; }
-.bol .destructive { color: #f0a0ae; }
-.bol .destructive:hover { background: #351b23; border-color: #623541; }
-.bol .nav-button.nav-general.selected { background-image: linear-gradient(to bottom, #163352, #15151a); border-color: #4da3ff; box-shadow: inset 0 1px 0 alpha(#4da3ff, 0.22), 0 0 9px alpha(#4da3ff, 0.08); }
-.bol .page-general .section-title { color: #4da3ff; }
-.bol .nav-button.nav-providers.selected { background-image: linear-gradient(to bottom, #34204b, #15151a); border-color: #ad78ff; box-shadow: inset 0 1px 0 alpha(#ad78ff, 0.22), 0 0 9px alpha(#ad78ff, 0.08); }
-.bol .page-providers .section-title { color: #ad78ff; }
-.bol .nav-button.nav-writing.selected { background-image: linear-gradient(to bottom, #3b2c13, #15151a); border-color: #ffb53f; box-shadow: inset 0 1px 0 alpha(#ffb53f, 0.22), 0 0 9px alpha(#ffb53f, 0.08); }
-.bol .page-writing .section-title { color: #ffb53f; }
-.bol .nav-button.nav-vocabulary.selected { background-image: linear-gradient(to bottom, #103c2b, #15151a); border-color: #43e3a1; box-shadow: inset 0 1px 0 alpha(#43e3a1, 0.22), 0 0 9px alpha(#43e3a1, 0.08); }
-.bol .page-vocabulary .section-title { color: #43e3a1; }
-.bol .nav-button.nav-snippets.selected { background-image: linear-gradient(to bottom, #3d1d32, #15151a); border-color: #ff72c2; box-shadow: inset 0 1px 0 alpha(#ff72c2, 0.22), 0 0 9px alpha(#ff72c2, 0.08); }
-.bol .page-snippets .section-title { color: #ff72c2; }
-.bol .nav-button.nav-history.selected { background-image: linear-gradient(to bottom, #10383e, #15151a); border-color: #39dcea; box-shadow: inset 0 1px 0 alpha(#39dcea, 0.22), 0 0 9px alpha(#39dcea, 0.08); }
-.bol .page-history .section-title { color: #39dcea; }
-.bol .nav-button.nav-shortcuts.selected { background-image: linear-gradient(to bottom, #2b2748, #15151a); border-color: #9b92ff; box-shadow: inset 0 1px 0 alpha(#9b92ff, 0.22), 0 0 9px alpha(#9b92ff, 0.08); }
-.bol .page-shortcuts .section-title { color: #9b92ff; }
-.bol button.primary { background-image: linear-gradient(to bottom, #8dc5ff, #4a99f5); font-weight: 700; box-shadow: inset 0 1px 0 #c0dfff, 0 2px 8px alpha(#388cff, 0.18); }
-.bol button.primary:disabled { background-image: none; box-shadow: none; }
-.bol .filter:checked { border-color: #4da3ff; background-image: linear-gradient(to bottom, #1d426c, #152a44); }
-.bol .tag { font-weight: 600; }
-.bol .key { color: #b6acff; background: #231e39; border-color: #4c416d; font-weight: 600; }
-.bol .transcript:hover { border-color: #296771; }
-.bol .history-toolbar:focus-within { border-color: #2a8d9b; }
-.bol .copy-action { color: #65efaf; background: #102b21; border-color: #285640; }
-.bol .copy-action:hover { background: #184333; border-color: #43e3a1; }
-.bol .export-action { color: #77e5f0; background: #10272c; border-color: #28515b; }
-.bol .export-action:hover { background: #163943; border-color: #39dcea; }
-.bol .memory-action { color: #ffd071; background: #302415; border-color: #5b4323; }
-.bol .memory-action:hover { background: #48351c; border-color: #ffb53f; }
-.bol .status { color: #94c6ff; }
-.bol .date-heading { color: #7edce5; }
-.bol .nav-button.nav-text-to-audio.selected { background: linear-gradient(to bottom, #422113, #17100c); border-color: #ff9b55; color: #ffbd88; }
-.bol .nav-button.nav-text-to-audio.selected label, .bol .page-text-to-audio .section-title { color: #ffbd88; }
-.bol scrollbar slider { background: #515151; min-width: 5px; border-radius: 4px; }
+window.bol  { background: #090909; color: #ececec; font-family: 'Noto Sans', sans-serif; font-size: 13px; }
+.bol headerbar  { background: #090909; box-shadow: none; border-bottom: 1px solid #242424; min-height: 40px; }
+.bol .sidebar  { background: #0c0c0c; border-right: 1px solid #242424; }
+.bol .brand  { font-size: 18px; font-weight: 700; color: #8cf3c2; }
+.bol .nav-heading  { font-size: 11px; color: #858585; font-weight: 500; }
+.bol .nav-button  { background: transparent; color: #aaa; border: none; box-shadow: none; border-radius: 7px; padding: 10px 12px; font-weight: 550; transition: background-color 120ms ease-in-out, color 120ms ease-in-out; }
+.bol .nav-button:hover  { background: #242424; color: #eee; }
+.bol .nav-button.selected  { border: 0; background: #242424; color: #f5f5f5; }
+.bol .page-title  { font-size: 30px; font-weight: 700; letter-spacing: -0.6px; }
+.bol .muted  { color: #929292; font-size: 12px; }
+.bol .section-title  { color: #ddd; font-size: 13px; font-weight: 600; }
+.bol .group  { background: #141414; border: 1px solid #292929; border-radius: 10px; }
+.bol .row-title  { font-weight: 500; color: #e4e4e4; }
+.bol .row-hint  { font-size: 11px; color: #999; }
+.bol separator  { background: #292929; min-height: 1px; }
+.bol entry, .bol passwordentry, .bol dropdown > button, .bol spinbutton  { background: #191919; color: #eee; border: 1px solid #333333; border-radius: 8px; box-shadow: none; min-height: 34px; }
+.bol entry:focus-within, .bol passwordentry:focus-within  { border-color: #4da3ff; outline: none; }
+.bol passwordentry entry, .bol spinbutton entry  { border: none; background: transparent; }
+.bol button  { background: #242424; color: #ddd; border: 1px solid #333; border-radius: 8px; box-shadow: none; padding: 8px 12px; transition: background-color 120ms ease-in-out, border-color 120ms ease-in-out; }
+.bol button:hover  { background: #303030; }
+.bol button.primary  { border: 0; background: #65b0ff; color: #101823;  font-weight: 600; }
+.bol button.primary:hover  { border: 0; background: #91c7ff;  }
+.bol button.primary:disabled  { border: 0; background: #222222; color: #858585;  }
+.bol switch  { background: #505050; border: none; min-width: 38px; min-height: 22px; }
+.bol switch:checked  { background: #4da3ff; }
+.bol switch slider  { background: #bdbdbd; border: none; box-shadow: none; }
+.bol switch:checked slider  { background: #142039; }
+.bol textview, .bol textview text  { background: #141414; color: #e4e4e4; }
+.bol textview  { border-radius: 8px; padding: 12px; font-size: 13px; }
+.bol .editor-frame  { border: 1px solid #424242; border-radius: 9px; }
+.bol .footer  { background: #090909; border-top: 1px solid #252525; }
+.bol .status  { color: #bdbdbd; font-size: 11px; }
+.bol .key  { border: 0; background: #292929; color: #b8b8b8;  border-radius: 5px; font-size: 10px; padding: 3px 6px; }
+.bol .empty  { color: #868686; padding: 25px; }
+.bol listbox  { background: transparent; }
+.bol listbox row  { padding: 10px; border-radius: 7px; }
+.bol listbox row:selected  { background: #303030; }
+.bol popover contents  { background: #242424; color: #eee; border: 1px solid #353535; border-radius: 10px; }
+.bol .history-toolbar  { background: #111111; border: 1px solid #292929; border-radius: 10px; padding: 8px; }
+.bol .filter  { background: transparent; border-color: transparent; color: #939393; padding: 7px 12px; }
+.bol button.filter:checked label  { border: 0; color: #f3f3f3; }
+.bol .filter:checked  { border: 0; background: #182b43; color: #b6d5ff;  }
+.bol .transcript  { background: #141414; border: 1px solid #292929; border-radius: 12px; padding: 19px; }
+.bol .transcript:hover  { border-color: #464646; background: #181818; }
+.bol .transcript-text  { font-size: 14px; color: #e4e4e4; line-height: 1.6; }
+.bol .transcript-meta  { color: #8c8c8c; font-size: 11px; }
+.bol .date-heading  { color: #a0a0a0; font-size: 11px; font-weight: 600; margin-top: 12px; margin-bottom: 2px; }
+.bol .tag  { border: 0; background: #232323;  border-radius: 5px; padding: 3px 7px; color: #aaa; font-size: 10px; }
+.bol .quiet  { background: transparent; border-color: transparent; color: #a0a0a0; padding: 6px 8px; }
+.bol .quiet:hover  { background: #292929; border-color: #3b3b3b; color: white; }
+.bol .history-empty  { background: #101010; border: 1px dashed #333333; border-radius: 12px; padding: 42px; }
+.bol .nav-button.nav-general.selected  { border: 0; background: #152235;  color: #4da3ff; }
+.bol .nav-button.nav-general.selected label  { border: 0; color: #4da3ff; }
+.bol .nav-button.nav-providers.selected  { border: 0; background: #251b36;  color: #ad78ff; }
+.bol .nav-button.nav-providers.selected label  { border: 0; color: #ad78ff; }
+.bol .nav-button.nav-writing.selected  { border: 0; background: #2d2317;  color: #ffb53f; }
+.bol .nav-button.nav-writing.selected label  { border: 0; color: #ffb53f; }
+.bol .nav-button.nav-vocabulary.selected  { border: 0; background: #152a21;  color: #43e3a1; }
+.bol .nav-button.nav-vocabulary.selected label  { border: 0; color: #43e3a1; }
+.bol .nav-button.nav-snippets.selected  { border: 0; background: #2d1b29;  color: #ff72c2; }
+.bol .nav-button.nav-snippets.selected label  { border: 0; color: #ff72c2; }
+.bol .nav-button.nav-history.selected  { border: 0; background: #15292d;  color: #39dcea; }
+.bol .nav-button.nav-history.selected label  { border: 0; color: #39dcea; }
+.bol .nav-button.nav-shortcuts.selected  { border: 0; background: #222235;  color: #9b92ff; }
+.bol .nav-button.nav-shortcuts.selected label  { border: 0; color: #9b92ff; }
+.bol .tag-dictation  { border: 0; background: #142b23; color: #65efaf;  }
+.bol .tag-edit  { border: 0; background: #261d35; color: #c29aff;  }
+.bol .tag-unsaved  { border: 0; background: #302417; color: #ffd071;  }
+.bol .saving-on  { border: 0; background: #142b23; color: #65efaf;  }
+.bol .saving-off  { border: 0; background: #302417; color: #ffd071;  }
+.bol .destructive  { color: #f0a0ae; }
+.bol .destructive:hover  { border: 0; background: #351b23;  }
+.bol .nav-button.nav-general.selected  { border: 0; background-image: linear-gradient(to bottom, #163352, #15151a);  box-shadow: none; }
+.bol .page-general .section-title  { color: #4da3ff; }
+.bol .nav-button.nav-providers.selected  { border: 0; background-image: linear-gradient(to bottom, #34204b, #15151a);  box-shadow: none; }
+.bol .page-providers .section-title  { color: #ad78ff; }
+.bol .nav-button.nav-writing.selected  { border: 0; background-image: linear-gradient(to bottom, #3b2c13, #15151a);  box-shadow: none; }
+.bol .page-writing .section-title  { color: #ffb53f; }
+.bol .nav-button.nav-vocabulary.selected  { border: 0; background-image: linear-gradient(to bottom, #103c2b, #15151a);  box-shadow: none; }
+.bol .page-vocabulary .section-title  { color: #43e3a1; }
+.bol .nav-button.nav-snippets.selected  { border: 0; background-image: linear-gradient(to bottom, #3d1d32, #15151a);  box-shadow: none; }
+.bol .page-snippets .section-title  { color: #ff72c2; }
+.bol .nav-button.nav-history.selected  { border: 0; background-image: linear-gradient(to bottom, #10383e, #15151a);  box-shadow: none; }
+.bol .page-history .section-title  { color: #39dcea; }
+.bol .nav-button.nav-shortcuts.selected  { border: 0; background-image: linear-gradient(to bottom, #2b2748, #15151a);  box-shadow: none; }
+.bol .page-shortcuts .section-title  { color: #9b92ff; }
+.bol button.primary  { border: 0; background-image: linear-gradient(to bottom, #8dc5ff, #4a99f5); font-weight: 700; box-shadow: 0 2px 8px alpha(#388cff, 0.18); }
+.bol button.primary:disabled  { border: 0; background-image: none; box-shadow: none; }
+.bol .filter:checked  { border: 0;  background-image: linear-gradient(to bottom, #1d426c, #152a44); }
+.bol .tag  { border: 0; font-weight: 600; }
+.bol .key  { border: 0; color: #b6acff; background: #231e39;  font-weight: 600; }
+.bol .transcript:hover  { border-color: #296771; }
+.bol .history-toolbar:focus-within  { border-color: #2a8d9b; }
+.bol .copy-action  { border: 0; color: #65efaf; background: #102b21;  }
+.bol .copy-action:hover  { border: 0; background: #184333;  }
+.bol .export-action  { border: 0; color: #77e5f0; background: #10272c;  }
+.bol .export-action:hover  { border: 0; background: #163943;  }
+.bol .memory-action  { border: 0; color: #ffd071; background: #302415;  }
+.bol .memory-action:hover  { border: 0; background: #48351c;  }
+.bol .status  { color: #94c6ff; }
+.bol .date-heading  { color: #7edce5; }
+.bol .nav-button.nav-text-to-audio.selected  { border: 0; background: linear-gradient(to bottom, #422113, #17100c);  color: #ffbd88; }
+.bol .nav-button.nav-text-to-audio.selected label, .bol .page-text-to-audio .section-title  { border: 0; color: #ffbd88; }
+.bol scrollbar slider  { background: #515151; min-width: 5px; border-radius: 4px; }
 '''
 
 LANGUAGE_NAMES = dict(zip(LANGUAGES, ['Detect automatically','English','Hindi','Punjabi','Bengali','Kannada','Malayalam','Marathi','Odia','Tamil','Telugu','Gujarati','Assamese','Urdu','Nepali','Konkani','Sanskrit','Sindhi','Kashmiri','Dogri','Bodo','Manipuri','Maithili','Santali']))
