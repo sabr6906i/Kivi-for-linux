@@ -164,11 +164,12 @@ class Service:
         self.started = 0
         self.outcome = ''
         self.settings = {}
+        self.pending_edit = None
 
     def status(self):
         return {'state': self.state, 'error': self.error, 'mode': self.mode,
                 'seconds': round(time.monotonic() - self.started, 1) if self.recorder else 0,
-                'outcome': self.outcome, 'has_result': bool(self.latest)}
+                'outcome': self.outcome, 'has_result': bool(self.latest), 'has_pending_edit': self.pending_edit is not None}
 
     def stop_recorder(self):
         if self.recorder:
@@ -183,6 +184,7 @@ class Service:
 
     def cancel(self, silent=False):
         self.generation += 1
+        self.pending_edit = None
         self.stop_recorder()
         if self.inference_process and self.inference_process.poll() is None:
             self.inference_process.terminate()
@@ -196,6 +198,23 @@ class Service:
 
     def command(self, command):
         with self.lock:
+            payload=command if isinstance(command,dict) else {}
+            command=payload.get('command') if payload else command
+            if command == 'review':
+                return {key:self.pending_edit[key] for key in ['generation','text','original','selection','app']} if self.pending_edit else {'error':'No edit is waiting for review.'}
+            if command == 'accept-edit':
+                if not self.pending_edit or payload.get('generation')!=self.pending_edit['generation']:
+                    return {'error':'This edit is no longer waiting for review.'}
+                pending=self.pending_edit
+                text=payload.get('text',pending['text'])
+                if not isinstance(text,str) or not text.strip() or len(text)>100000:
+                    return {'error':'The reviewed text must contain 1–100000 characters.'}
+                self.pending_edit=None
+                try:
+                    self.commit_result(pending['generation'],text,pending['original'],pending['settings'],pending['app'],'edit',pending['selection'],pending['target'],focus=True)
+                except Exception as error:
+                    self.state,self.error='Ready',str(error)
+                return self.status()
             if command == 'status':
                 return self.status()
             if command == 'result':
@@ -213,8 +232,8 @@ class Service:
                 return self.status()
             if command not in ['toggle', 'start', 'edit']:
                 return {'error': 'Unknown command'}
-            if self.state in ['Transcribing', 'Writing']:
-                notify('Still processing. F9 cancels this request.')
+            if self.state in ['Transcribing', 'Writing', 'Review']:
+                notify('An edit is waiting in Bol for review.' if self.state=='Review' else 'Still processing. F9 cancels this request.')
                 return self.status()
             if self.recorder:
                 if command != 'start':
@@ -299,29 +318,12 @@ class Service:
             with self.lock:
                 if generation != self.generation:
                     return
-                self.latest, self.original = text, original
-                self.latest_metadata = {'app': app, 'mode': mode, 'created': datetime.now(timezone.utc).isoformat()}
-                if settings.get('history_enabled'):
-                    History(CONFIG).add(app, mode, original, text)
-                same_window = target and active_window().get('address') == target
-                selection_unchanged = True
-                terminal = any(name in app.casefold() for name in ['kitty', 'alacritty', 'foot', 'wezterm', 'konsole', 'terminal'])
-                if mode == 'edit' and same_window and not terminal:
-                    selection_unchanged = selection_for(target) == selection
-                copy_text(text)
-                same_window = same_window and active_window().get('address') == target
-                if settings.get('auto_paste', True) and same_window and selection_unchanged:
-                    # Electron editors and terminals often use different paste shortcuts.
-                    terminal = any(name in app.casefold() for name in ['kitty', 'alacritty', 'foot', 'wezterm', 'konsole', 'terminal'])
-                    if mode == 'edit' and selection:
-                        # Some X11 text widgets insert on Ctrl+V without replacing a selection.
-                        shortcut('BackSpace', '')
-                    shortcut('V', 'CTRL SHIFT' if terminal else 'CTRL')
-                    self.outcome = 'Paste shortcut sent'
-                else:
-                    self.outcome = 'Copied — paste manually (focus or selection changed)' if not same_window or not selection_unchanged else 'Copied'
-                self.state, self.error = 'Ready', warning
-                notify(warning or self.outcome)
+                if mode=='edit' and settings.get('review_edits',False):
+                    self.pending_edit={'generation':generation,'text':text,'original':original,'settings':settings,'app':app,'selection':selection,'target':target}
+                    self.state,self.error,self.outcome='Review','','Edit ready — review it in Bol'
+                    notify(self.outcome)
+                    return
+                self.commit_result(generation,text,original,settings,app,mode,selection,target,warning=warning)
         except Exception as error:
             with self.lock:
                 if generation == self.generation:
@@ -331,12 +333,46 @@ class Service:
             directory.cleanup()
 
 
+    def commit_result(self,generation,text,original,settings,app,mode,selection,target,warning='',focus=False):
+        if generation!=self.generation:return
+        self.latest, self.original = text, original
+        self.latest_metadata = {'app': app, 'mode': mode, 'created': datetime.now(timezone.utc).isoformat()}
+        if focus:
+            clients=json.loads(subprocess.check_output(['hyprctl','-j','clients'],text=True,timeout=3))
+            if any(client.get('address')==target for client in clients):
+                selector='address:'+target
+                code='hl.dsp.focus({ window = '+json.dumps(selector)+' })'
+                subprocess.run(['hyprctl','dispatch',code],check=True,capture_output=True,timeout=3)
+                time.sleep(.15)
+        if settings.get('history_enabled'):
+            History(CONFIG,settings.get('history_retention_days',0)).add(app, mode, original, text)
+        same_window = target and active_window().get('address') == target
+        selection_unchanged = True
+        terminal = any(name in app.casefold() for name in ['kitty', 'alacritty', 'foot', 'wezterm', 'konsole', 'terminal'])
+        if mode == 'edit' and same_window and not terminal:
+            selection_unchanged = selection_for(target) == selection
+        copy_text(text)
+        same_window = same_window and active_window().get('address') == target
+        if settings.get('auto_paste', True) and same_window and selection_unchanged:
+            # Electron editors and terminals often use different paste shortcuts.
+            terminal = any(name in app.casefold() for name in ['kitty', 'alacritty', 'foot', 'wezterm', 'konsole', 'terminal'])
+            if mode == 'edit' and selection:
+                # Some X11 text widgets insert on Ctrl+V without replacing a selection.
+                shortcut('BackSpace', '')
+            shortcut('V', 'CTRL SHIFT' if terminal else 'CTRL')
+            self.outcome = 'Paste shortcut sent'
+        else:
+            self.outcome = 'Copied — paste manually (focus or selection changed)' if not same_window or not selection_unchanged else 'Copied'
+        self.state, self.error = 'Ready', warning
+        notify(warning or self.outcome)
+
+
 def request(command, start=True):
     try:
         with socket.socket(socket.AF_UNIX) as client:
             client.settimeout(10)
             client.connect(str(SOCKET))
-            client.sendall(command.encode())
+            client.sendall((json.dumps(command) if isinstance(command,dict) else command).encode())
             client.shutdown(socket.SHUT_WR)
             chunks = []
             while chunk := client.recv(65536):
@@ -380,7 +416,14 @@ def daemon():
                     with client:
                         client.settimeout(5)
                         try:
-                            result = service.command(client.recv(64).decode())
+                            chunks=[]
+                            size=0
+                            while chunk:=client.recv(65536):
+                                size+=len(chunk)
+                                if size>1048576:raise ValueError('Control request is too large.')
+                                chunks.append(chunk)
+                            message=b''.join(chunks).decode()
+                            result = service.command(json.loads(message) if message.startswith('{') else message)
                         except Exception as error:
                             result = {'error': str(error)}
                         client.sendall(json.dumps(result).encode())

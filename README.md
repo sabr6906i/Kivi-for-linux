@@ -8,7 +8,9 @@ An independent voice typing and writing app for **Hyprland / Wayland**. Inspired
 - Floating recording/processing indicator that does not take focus.
 - English and 22 Indic languages, automatic detection, mixed-script output, Roman transliteration, English translation and verbatim modes.
 - Optional AI polish: punctuation, filler removal, spoken corrections, paragraphs and lists.
-- Voice editing: select text, say how to rewrite/translate/shorten/format it, then replace the selection. Without a selection, draft from your instruction.
+- Reviewable voice edits: inspect or change the proposal, then approve, copy or discard it. Approval rechecks the target window and selection.
+- History retention choices: 24 hours, 7 days, 30 days, or the existing 200-result limit.
+- Voice editing: select text, say how to rewrite/translate/shorten/format it, then review the proposed replacement. Without a selection, draft from your instruction.
 - Global writing preferences plus exact app-class writing profiles.
 - Recognition vocabulary (up to 50 terms), remembered spelling corrections, and spoken text snippets.
 - Latest-result recovery, optional private local history capped at 200 entries, copy and clear controls.
@@ -65,7 +67,7 @@ Run `hyprctl reload`. On the original development machine these bindings are alr
 
 - **F8:** start recording; press again to finish and transcribe. Hold mode can be enabled in settings.
 - **F9:** cancel recording or discard a pending result; it does not transcribe.
-- **F10:** select text, press F10, speak an editing instruction, then press F10 again. You can also finish with F8. With no selection, it drafts at the cursor.
+- **F10:** select text, press F10, speak an editing instruction, then press F10 again. You can also finish with F8. With review enabled (the default), open Bol and click **Review edit** to inspect or change the proposal. **Approve and insert** explicitly focuses the original window and rechecks its selection; if it changed, the result is copied for manual paste. **Copy only** copies the proposal but leaves it pending; discard it when finished. Closing the review window also leaves it pending. F9 discards it. With no selection, Bol drafts from your instruction.
 
 Keep the original text box focused and leave the selection unchanged. If the app or captured selection changes, Bol copies the result for manual paste. The latest result is available in **History → Refresh** even with disk history disabled. `bol copy-last` also recovers it. Latest-result memory is cleared when the daemon exits.
 
@@ -77,7 +79,7 @@ Open **Bol Voice Typing** from your app launcher, or run `~/.local/bin/bol setti
 
 - **General:** speech engine, language, output mode, microphone node name (blank uses the PipeWire default), recording limit, paste, and local-history preference.
 - **Providers:** Sarvam key, local Whisper paths, compatible API endpoints and separate keys, and the local-speech writing opt-in.
-- **Writing:** optional polish, global rules and per-app rules. Profiles use exact app classes, e.g. `Chatgpt => Preserve code identifiers; be concise`. The app can show currently open app classes. Writing rules apply to AI polish and voice editing, not raw dictation.
+- **Writing:** review-before-insert (on by default), optional polish, global rules and per-app rules. Profiles use exact app classes, e.g. `Chatgpt => Preserve code identifiers; be concise`. The app can show currently open app classes. Writing rules apply to AI polish and voice editing, not raw dictation.
 - **Vocabulary:** one recognition hint per line. Add explicit corrections such as `sara vam => Sarvam`. Corrections match whole words/phrases and preserve unrelated text. Recognition hints go to the speech API.
 - **Snippets:** e.g. `my signature => Regards,\nSarbjeet`. Say only the trigger phrase to expand it. Use literal `\n` for line breaks.
 - **History:** browse cards grouped by local date, search and filter by interaction type, copy a card, or open View transcript to compare the final result with the original speech. In voice-edit entries, Instruction is what you asked Bol to do. The detail view supports temporary edits, copying, text export and remembered corrections; preview edits do not alter saved history. Export history respects both search and type filters. History saving must be enabled in General to retain new results; unsaved session results are clearly marked.
@@ -87,7 +89,7 @@ Open **Bol Voice Typing** from your app launcher, or run `~/.local/bin/bol setti
 
 Audio goes to the selected speech API for cloud recognition. With local whisper.cpp, audio stays on your computer. AI polish sends the dictated text and writing rules to Sarvam. Voice editing also sends the text explicitly copied from your selection. There is no automatic screen capture or background reading of app contents.
 
-Settings live at `~/.config/bol-linux/settings.json`, including the API key, with owner-only file permissions. Temporary audio is deleted after processing. History is **off by default**. When enabled it stores the original transcript, final text, app class and UTC timestamp in an owner-only `history.sqlite3`, retaining the newest 200 results. Disabling history stops future storage; use Clear history to remove existing entries. Text is also placed on the clipboard and may be retained by your clipboard manager.
+Settings live at `~/.config/bol-linux/settings.json`, including the API key, with owner-only file permissions. Temporary audio is deleted after processing. History is **off by default**. When enabled it stores the original transcript, final text, app class and UTC timestamp in an owner-only `history.sqlite3`, retaining the newest 200 results. Disabling history stops future storage; use Clear history to remove existing entries. Retention can be limited to 24 hours, 7 days or 30 days in General. Expiration runs when history is read or written; no background deletion runs while Bol is closed. Pending, unapproved voice edits are kept only in memory and are not added to history. Text is also placed on the clipboard and may be retained by your clipboard manager.
 
 Cancellation prevents pending results from being pasted or added to history, and stops further chunk uploads, but cannot recall an API request already sent. If polish fails, raw dictation is recovered. If editing fails, selected text is left intact. A paste shortcut being accepted does not prove that an application's text widget accepted the text; recover the result from History or `bol copy-last` if necessary.
 
@@ -118,3 +120,5 @@ bash -n install.sh
 ## Remove
 
 Remove the Bol bindings from your Hyprland config and reload. Stop the Bol daemon, then delete `~/.local/bin/bol`, `~/.local/share/bol-linux`, and `~/.local/share/applications/bol-linux.desktop`. Optionally remove `~/.config/bol-linux` including settings and history.
+
+See [ROADMAP.md](ROADMAP.md) for the next development milestones and their completion criteria.

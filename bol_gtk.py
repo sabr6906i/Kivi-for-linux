@@ -183,6 +183,7 @@ class Workspace:
         inner=Gtk.Box(spacing=12);margins(inner,18);inner.set_hexpand(True);footer.append(inner)
         self.save_note=label('All changes saved','muted');self.save_note.set_hexpand(True);inner.append(self.save_note)
         self.status=label('Ready','status');self.status.set_ellipsize(3);self.status.set_max_width_chars(28);inner.append(self.status)
+        self.review_button=Gtk.Button(label='Review edit');self.review_button.add_css_class('primary');self.review_button.set_visible(False);self.review_button.connect('clicked',self.review_pending);inner.append(self.review_button)
         self.cancel_button=action_button('Cancel recording','cancel');cancel=self.cancel_button;cancel.set_visible(False);cancel.connect('clicked',self.cancel_recording);inner.append(cancel)
         self.save_button=Gtk.Button(label='Save changes');self.save_button.add_css_class('primary');self.save_button.set_sensitive(False);self.save_button.connect('clicked',self.save);inner.append(self.save_button)
         main.append(footer)
@@ -247,6 +248,7 @@ class Workspace:
         group=self.section(page,'Workflow')
         self.toggle(group,'auto_paste','Automatic paste','Insert the result into your original focused app.')
         self.toggle(group,'history_enabled','Save history','Keep up to 200 results locally on this computer.')
+        self.choice(group,'history_retention_days','Keep saved history','Expired results are deleted when history is read or written.',[0,1,7,30],{0:'Up to 200 results',1:'24 hours',7:'7 days',30:'30 days'})
         page.append(label('Local Whisper keeps audio on your computer. Cloud engines send audio to the selected provider. AI writing sends text and preferences to its configured endpoint.','muted',True))
 
     def build_providers(self):
@@ -292,6 +294,7 @@ class Workspace:
     def build_writing(self):
         page=self.pages['Writing'];group=self.section(page,'Dictation')
         self.toggle(group,'polish','Polish with AI','Remove fillers, resolve corrections, and format your words.')
+        self.toggle(group,'review_edits','Review voice edits before inserting','Read or change the proposed edit, then approve or discard it.')
         group=self.section(page,'Your writing style','For example: British spelling, concise sentences, and preserve Punjabi.')
         self.editor(group,'writing_rules',self.settings.get('writing_rules',''))
         group=self.section(page,'App preferences','One exact app class => instruction per line. Example: Chatgpt => Preserve code identifiers.')
@@ -476,7 +479,7 @@ class Workspace:
         token=self.history_request
         def worker():
             try:
-                rows=History(self.core.CONFIG).list() if (self.core.CONFIG/'history.sqlite3').exists() else []
+                rows=History(self.core.CONFIG,self.core.config().get('history_retention_days',0)).list() if (self.core.CONFIG/'history.sqlite3').exists() else []
                 latest=self.core.request('result') if load_latest else None
                 GLib.idle_add(self.history_loaded,token,rows,latest,None)
             except Exception as error:GLib.idle_add(self.history_loaded,token,[],None,str(error))
@@ -506,7 +509,7 @@ class Workspace:
 
     def export_results(self, history=False, parent=None):
         if history:
-            data=filter_history(History(self.core.CONFIG).list(),self.history_search.get_text(),self.history_kind) if (self.core.CONFIG/'history.sqlite3').exists() else []
+            data=filter_history(History(self.core.CONFIG,self.core.config().get('history_retention_days',0)).list(),self.history_search.get_text(),self.history_kind) if (self.core.CONFIG/'history.sqlite3').exists() else []
             if not data:
                 self.dialog('Nothing to export','No saved history matches the current search.');return
             payload=json.dumps(data,ensure_ascii=False,indent=2)+'\n'
@@ -579,7 +582,7 @@ class Workspace:
         dialog.add_button('Clear history',Gtk.ResponseType.ACCEPT)
         def response(d,value):
             if value==Gtk.ResponseType.ACCEPT:
-                if (self.core.CONFIG/'history.sqlite3').exists():History(self.core.CONFIG).clear()
+                if (self.core.CONFIG/'history.sqlite3').exists():History(self.core.CONFIG,self.core.config().get('history_retention_days',0)).clear()
                 self.refresh_history()
             d.destroy()
         dialog.connect('response',response);dialog.present()
@@ -614,23 +617,71 @@ class Workspace:
         if not getattr(self,'polling',False):
             self.polling=True
             def worker():
-                busy=False
+                busy=False;review=False
                 try:
                     state=self.core.request('status')
-                    busy=state.get('state') in ['Recording','Transcribing','Writing']
+                    busy=state.get('state') in ['Recording','Transcribing','Writing','Review']
+                    review=bool(state.get('has_pending_edit'))
                     text=state.get('error') or (f'Recording · {state["seconds"]:.0f}s' if state['state']=='Recording' else state.get('outcome') or state['state'])
                 except Exception as error:text=str(error)
-                GLib.idle_add(self.status_update,text,busy)
+                GLib.idle_add(self.status_update,text,busy,review)
             threading.Thread(target=worker,daemon=True).start()
         return True
 
-    def status_update(self,text,busy=False):
+    def status_update(self,text,busy=False,review=False):
         self.polling=False
         if self.alive:
             if self.status.get_text()!=text:
                 self.status.set_text(text);self.status.set_tooltip_text(text)
             if self.cancel_button.get_visible()!=busy:self.cancel_button.set_visible(busy)
+            if self.review_button.get_visible()!=review:self.review_button.set_visible(review)
         return False
+
+    def review_pending(self,*args):
+        self.review_button.set_sensitive(False)
+        def worker():
+            try:result=self.core.request('review')
+            except Exception as error:result={'error':str(error)}
+            GLib.idle_add(self.show_edit_review,result)
+        threading.Thread(target=worker,daemon=True).start()
+
+    def show_edit_review(self,result):
+        if not self.alive:return False
+        self.review_button.set_sensitive(True)
+        if result.get('error'):self.dialog('Review unavailable',result['error']);return False
+        dialog=Gtk.Window(title='Review voice edit',transient_for=self.window,modal=True);dialog.add_css_class('bol');dialog.set_default_size(700,650)
+        box=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=14);margins(box,24);dialog.set_child(box)
+        box.append(label('Review your edit','page-title'))
+        box.append(label('Nothing is inserted until you approve. Closing this window keeps the edit pending.','muted',True))
+        instruction=label('Instruction: '+result.get('original',''),'muted',True);instruction.set_max_width_chars(75);instruction.set_lines(3);instruction.set_ellipsize(3);box.append(instruction)
+        if result.get('selection'):
+            original=Gtk.Expander(label='Selected text')
+            scroll=Gtk.ScrolledWindow();scroll.set_min_content_height(100);scroll.set_max_content_height(130)
+            source=Gtk.TextView();source.set_editable(False);source.set_cursor_visible(False);source.set_wrap_mode(Gtk.WrapMode.WORD_CHAR);source.get_buffer().set_text(result['selection']);scroll.set_child(source);original.set_child(scroll);box.append(original)
+        box.append(label('Proposed result','section-title'))
+        scroll=Gtk.ScrolledWindow();scroll.set_vexpand(True);scroll.set_min_content_height(220);scroll.add_css_class('editor-frame')
+        proposal=Gtk.TextView();proposal.set_wrap_mode(Gtk.WrapMode.WORD_CHAR);proposal.get_buffer().set_text(result['text']);scroll.set_child(proposal);box.append(scroll)
+        controls=Gtk.Box(spacing=10)
+        discard=Gtk.Button(label='Discard');controls.append(discard)
+        copy=action_button('Copy only','copy');controls.append(copy)
+        space=Gtk.Box();space.set_hexpand(True);controls.append(space)
+        approve=Gtk.Button(label='Approve and insert');approve.add_css_class('primary');controls.append(approve)
+        def submit(command):
+            text=proposal.get_buffer().get_text(proposal.get_buffer().get_start_iter(),proposal.get_buffer().get_end_iter(),True)
+            if command=='copy':self.core.copy_text(text);self.status.set_text('Edit copied');return
+            approve.set_sensitive(False);discard.set_sensitive(False)
+            payload={'command':'accept-edit','generation':result['generation'],'text':text} if command=='approve' else 'cancel'
+            # Close before asking the daemon to focus the original target window.
+            dialog.close()
+            def worker():
+                try:
+                    response=self.core.request(payload)
+                    message=response.get('error') or response.get('outcome') or 'Edit discarded'
+                except Exception as error:message=str(error)
+                GLib.idle_add(self.cancel_finished,message)
+            threading.Thread(target=worker,daemon=True).start()
+        discard.connect('clicked',lambda b:submit('discard'));copy.connect('clicked',lambda b:self.action(lambda:submit('copy')));approve.connect('clicked',lambda b:submit('approve'))
+        box.append(controls);dialog.present();return False
 
     def on_close(self,*args):
         self.alive=False

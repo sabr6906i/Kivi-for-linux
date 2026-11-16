@@ -17,7 +17,7 @@ DEFAULTS = {
     'writing_api_url': '', 'writing_api_model': '', 'writing_api_key': '',
     'language': 'unknown', 'output_mode': 'transcribe', 'auto_paste': True,
     'polish': False, 'writing_rules': '', 'profiles': {}, 'vocabulary': [],
-    'corrections': {}, 'snippets': {}, 'history_enabled': False,
+    'corrections': {}, 'snippets': {}, 'history_enabled': False, 'history_retention_days': 0, 'review_edits': True,
     'microphone': '', 'record_key': 'F8', 'cancel_key': 'F9', 'edit_key': 'F10',
     'record_seconds': 120, 'hold_to_talk': False, 'chat_model': 'sarvam-105b',
 }
@@ -85,7 +85,7 @@ def write(text, settings, app='', selection='', editing=False):
 
 
 class History:
-    def __init__(self, folder):
+    def __init__(self, folder, retention_days=0):
         folder = Path(folder)
         folder.mkdir(parents=True, exist_ok=True, mode=0o700)
         path = folder / 'history.sqlite3'
@@ -96,6 +96,11 @@ class History:
         self.path = path
         with self.connect() as db:
             db.execute('CREATE TABLE IF NOT EXISTS history (id INTEGER PRIMARY KEY, created TEXT DEFAULT CURRENT_TIMESTAMP, app TEXT, mode TEXT, original TEXT, result TEXT)')
+            days=int(retention_days)
+            if days not in [0,1,7,30]:raise ValueError('Unsupported history retention period.')
+            if days:
+                db.execute('PRAGMA secure_delete=ON')
+                db.execute("DELETE FROM history WHERE datetime(created)<datetime('now',?)", ('-'+str(days)+' days',))
 
     @contextmanager
     def connect(self):
