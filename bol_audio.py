@@ -72,16 +72,20 @@ def suggest_delivery(instructions,settings,language='en-IN'):
             'do not write a script or add fields. If a requested effect is unsupported, choose the closest supported controls.')
     payload={'model':settings.get('chat_model','sarvam-105b'),'messages':[{'role':'system','content':system},
              {'role':'user','content':json.dumps({'instructions':instructions,'language':language,'voices':VOICE_TRAITS},ensure_ascii=False)}],
-             'temperature':.1,'max_tokens':200}
+             'temperature':.1,'max_tokens':1024}
     if settings.get('writing_provider')=='compatible':
         from bol_providers import chat_api
         result=chat_api(payload,settings)
     else:
         if not settings.get('api_key'):raise ValueError('Add a Sarvam API key or configure a writing provider first.')
+        payload['reasoning_effort']=None
+        payload['response_format']={'type':'json_object'}
         request=urllib.request.Request('https://api.sarvam.ai/v1/chat/completions',data=json.dumps(payload).encode(),headers={'api-subscription-key':settings['api_key'],'Content-Type':'application/json'})
         try:
             with urllib.request.urlopen(request,timeout=60) as response:result=json.load(response)
         except urllib.error.HTTPError as error:raise RuntimeError(f'Style suggestion returned HTTP {error.code}. Check writing-model access and credits.') from None
+    if result.get('choices',[{}])[0].get('finish_reason')=='length':
+        raise RuntimeError('The writing response was truncated. Try a preset or a writing model with a larger output budget.')
     try:
         content=result['choices'][0]['message']['content'].strip()
         if content.startswith('```'):content='\n'.join(content.splitlines()[1:-1])
