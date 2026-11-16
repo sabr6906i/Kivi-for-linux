@@ -9,7 +9,7 @@ gi.require_version('Gtk', '4.0')
 from gi.repository import Gtk, Gdk, GLib, Gio
 from bol_features import LANGUAGES, MODES, History, audio_level, history_date, filter_history
 from bol_providers import SPEECH_PROVIDERS, WRITING_PROVIDERS, detect_whisper, validate_speech
-from bol_audio import synthesize, TTS_LANGUAGES, TTS_VOICES
+from bol_audio import synthesize, suggest_delivery, STYLE_PRESETS, TTS_LANGUAGES, TTS_VOICES
 from bol_ui import parse_pairs, format_pairs, apply_shortcuts
 
 CSS = b'''
@@ -191,6 +191,7 @@ class Workspace:
         self.audio_path=None
         self.audio_directory=None
         self.audio_player=None
+        self.audio_style_generation=0
         self.app=Gtk.Application(application_id='io.github.bol.Workspace', flags=Gio.ApplicationFlags.NON_UNIQUE)
         self.app.connect('activate', self.activate)
 
@@ -288,7 +289,7 @@ class Workspace:
         scroller.add_css_class('editor-frame');margins(scroller,14)
         view=Gtk.TextView();view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR);view.set_top_margin(12);view.set_bottom_margin(12);view.set_left_margin(12);view.set_right_margin(12)
         buffer=view.get_buffer();buffer.set_text(text)
-        if key not in ['result','tts_text']:buffer.connect('changed',self.changed)
+        if key not in ['result','tts_text','tts_instructions']:buffer.connect('changed',self.changed)
         self.buffers[key]=buffer;scroller.set_child(view);group.append(scroller);return buffer
 
     def build_audio(self):
@@ -304,6 +305,18 @@ class Workspace:
         self.row(group,'Voice','Choose the speaker used for generation.',self.audio_voice)
         self.audio_pace=Gtk.SpinButton.new_with_range(.5,2,.1);self.audio_pace.set_digits(1);self.audio_pace.set_value(1)
         self.row(group,'Speaking speed','1.0 is the natural speaking pace.',self.audio_pace)
+        self.audio_expression=Gtk.SpinButton.new_with_range(.01,1,.05);self.audio_expression.set_digits(2);self.audio_expression.set_value(.6)
+        self.row(group,'Expressiveness','Higher values add variation; they do not guarantee a specific emotion.',self.audio_expression)
+        group=self.section(page,'Delivery style','Choose a preset or describe the feeling you want. Your script stays unchanged.')
+        self.audio_styles=list(STYLE_PRESETS)
+        self.audio_style=Gtk.DropDown.new_from_strings(self.audio_styles);self.audio_style.set_size_request(245,-1)
+        self.audio_style.connect('notify::selected',self.apply_audio_preset)
+        self.row(group,'Style preset','Applies a stock voice, pace and expressiveness.',self.audio_style)
+        self.editor(group,'tts_instructions','',90)
+        self.audio_apply_style=Gtk.Button(label='Apply instructions');self.audio_apply_style.connect('clicked',self.apply_audio_instructions)
+        self.row(group,'Describe the delivery','For example: warm and reassuring, a little slower, with a professional tone. Uses your writing API; may consume credits.',self.audio_apply_style)
+        self.audio_style_note=label('Click Apply instructions before generating. Instructions choose voice, speed and variation; exact emotions or effects are not guaranteed.','muted',True);margins(self.audio_style_note,16);group.append(self.audio_style_note)
+
         actions=Gtk.FlowBox();actions.set_selection_mode(Gtk.SelectionMode.NONE);actions.set_homogeneous(False);actions.set_column_spacing(8);actions.set_row_spacing(8);actions.set_max_children_per_line(3)
         self.audio_generate=Gtk.Button(label='Generate audio');self.audio_generate.add_css_class('primary');self.audio_generate.connect('clicked',self.generate_audio);actions.insert(self.audio_generate,-1)
         self.audio_cancel=Gtk.Button(label='Cancel generation');self.audio_cancel.set_sensitive(False);self.audio_cancel.connect('clicked',self.cancel_audio);actions.insert(self.audio_cancel,-1)
@@ -314,18 +327,67 @@ class Workspace:
         self.audio_play=action_button('Play','play');self.audio_play.set_sensitive(False);self.audio_play.connect('clicked',self.play_audio);player.append(self.audio_play)
         stop=action_button('Stop','cancel');stop.connect('clicked',lambda b:self.stop_audio());player.append(stop)
         self.audio_save=action_button('Save WAV','export');self.audio_save.set_sensitive(False);self.audio_save.connect('clicked',self.save_audio);player.append(self.audio_save);group.append(player)
+        self.audio_voice.connect('notify::selected',self.audio_controls_changed)
+        self.audio_language.connect('notify::selected',self.audio_controls_changed)
+        self.audio_pace.connect('value-changed',self.audio_controls_changed)
+        self.audio_expression.connect('value-changed',self.audio_controls_changed)
+        self.buffers['tts_instructions'].connect('changed',self.audio_instructions_changed)
         page.append(label('Generated audio is temporary until you save it. Closing Bol deletes the temporary clip. Audio is not played automatically.','muted',True))
 
+    def audio_controls_changed(self,*args):
+        if getattr(self,'applying_audio_plan',False):return
+        self.audio_style_generation+=1;self.audio_apply_style.set_sensitive(True)
+        self.audio_style_note.set_text('Manual settings updated. Generate audio to use the selected voice, speed and expressiveness.')
+
+    def audio_instructions_changed(self,*args):
+        self.audio_style_generation+=1;self.audio_apply_style.set_sensitive(True)
+        self.audio_style_note.set_text('Instructions changed. Click Apply instructions to turn them into delivery settings.')
+
+    def apply_audio_plan(self,plan):
+        self.applying_audio_plan=True
+        try:
+            self.audio_voice.set_selected(TTS_VOICES.index(plan['voice']))
+            self.audio_pace.set_value(plan['pace']);self.audio_expression.set_value(plan['temperature'])
+        finally:self.applying_audio_plan=False
+        self.audio_style_note.set_text(f"Applied: {plan['voice'].capitalize()} voice, {plan['pace']:.2f}× speed, {plan['temperature']:.2f} expressiveness. You can adjust these before generating.")
+
+    def apply_audio_preset(self,*args):
+        self.audio_style_generation+=1
+        self.audio_apply_style.set_sensitive(True)
+        plan=STYLE_PRESETS[self.audio_styles[self.audio_style.get_selected()]]
+        if plan:self.apply_audio_plan(plan)
+        else:self.audio_style_note.set_text('Manual settings: choose your voice, speed and expressiveness above.')
+
+    def apply_audio_instructions(self,*args):
+        instructions=self.text('tts_instructions')
+        if not instructions.strip() or len(instructions.strip())>1500:self.dialog('Delivery instructions','Enter 1–1500 characters describing the vocal delivery.');return
+        settings=self.core.config();language=TTS_LANGUAGES[self.audio_language.get_selected()]
+        self.audio_style_generation+=1;token=self.audio_style_generation
+        self.audio_apply_style.set_sensitive(False);self.audio_style_note.set_text('Choosing delivery settings… Your script will not be changed.')
+        def worker():
+            try:plan=suggest_delivery(instructions,settings,language);error=None
+            except Exception as exc:plan=None;error=str(exc)
+            GLib.idle_add(self.audio_style_suggested,token,plan,error)
+        threading.Thread(target=worker,daemon=True).start()
+
+    def audio_style_suggested(self,token,plan,error):
+        if not self.alive or token!=self.audio_style_generation:return False
+        self.audio_apply_style.set_sensitive(True)
+        if error:self.audio_style_note.set_text(error)
+        else:self.apply_audio_plan(plan)
+        return False
+
     def generate_audio(self,*args):
+        if not self.audio_apply_style.get_sensitive():self.dialog('Style suggestion in progress','Wait for the delivery settings, or choose a preset to cancel the suggestion.');return
         text=self.text('tts_text')
         if not text.strip() or len(text.strip())>2500:self.dialog('Check your text','Enter between 1 and 2500 characters.');return
         key=self.core.config().get('api_key','')
         if not key:self.dialog('Sarvam key required','Add your Sarvam API key in Providers.');return
-        language=TTS_LANGUAGES[self.audio_language.get_selected()];voice=TTS_VOICES[self.audio_voice.get_selected()];pace=self.audio_pace.get_value()
+        language=TTS_LANGUAGES[self.audio_language.get_selected()];voice=TTS_VOICES[self.audio_voice.get_selected()];pace=self.audio_pace.get_value();expression=self.audio_expression.get_value()
         self.audio_generation+=1;generation=self.audio_generation
         self.audio_generate.set_sensitive(False);self.audio_cancel.set_sensitive(True);self.audio_note.set_text('Generating audio… You can continue using Bol.')
         def worker():
-            try:data=synthesize(text,key,language,voice,pace);error=None
+            try:data=synthesize(text,key,language,voice,pace,expression);error=None
             except Exception as exc:data=None;error=str(exc)
             GLib.idle_add(self.audio_generated,generation,data,error)
         threading.Thread(target=worker,daemon=True).start()
@@ -854,7 +916,7 @@ class Workspace:
 
     def on_close(self,*args):
         self.alive=False
-        self.audio_generation+=1;self.stop_audio()
+        self.audio_generation+=1;self.audio_style_generation+=1;self.stop_audio()
         if self.audio_directory:self.audio_directory.cleanup()
         process=getattr(self,'mic_test_process',None)
         if process and process.poll() is None:process.terminate()

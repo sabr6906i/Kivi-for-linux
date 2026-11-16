@@ -61,6 +61,12 @@ Open **Text to Audio** from the sidebar. Type or paste text, choose a language, 
 
 This uses [Sarvam Bulbul v3](https://docs.sarvam.ai/api-reference/text-to-speech/convert) with the existing Sarvam API key from Providers. Text is sent to Sarvam and generation may use API credits, even if local Whisper is selected for dictation. Supports English, Hindi, Punjabi, Bengali, Tamil, Telugu, Kannada, Malayalam, Marathi, Gujarati and Odia, with up to 2500 characters per request. Speaking speed ranges from 0.5 to 2.0.
 
+For the audio's delivery, choose a **Style preset** (calm, warm, professional, energetic promo, storytelling or dramatic narration). Presets select a stock voice, pace and variation setting without an extra API request.
+
+You can also describe the delivery in the instruction field, then click **Apply instructions**. For example: “Warm and reassuring, slightly slower, with a professional tone.” This uses your selected writing API to suggest valid voice, pace and expressiveness settings. You can inspect and adjust them before **Generate audio**. Instructions are not read aloud, and the script is never sent to the style-planning model or rewritten. Editing the controls or instructions invalidates a pending suggestion so late responses cannot overwrite your changes.
+
+This maps your request to Bulbul v3's supported controls; it is not a free-form emotion engine. Exact emotions, whispering, sound effects, music and arbitrary acting directions are not guaranteed. Expressiveness controls variation, not a precise emotional intensity. Style planning can consume additional writing-API credits.
+
 After generation, click **Play**, **Stop**, or **Save WAV**. Playback uses `pw-play`. Generated audio is not played automatically. Temporary clips are private and removed when the settings window closes; use Save WAV to keep a copy. Cancelling generation discards a late result but cannot recall a request already sent to the API. This first integration uses stock voices, not voice cloning.
 
 ## Shortcuts
