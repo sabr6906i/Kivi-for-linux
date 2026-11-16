@@ -6,6 +6,7 @@ import os
 import re
 import wave
 from copy import deepcopy
+from datetime import datetime, timezone
 from pathlib import Path
 import shutil
 import signal
@@ -158,6 +159,7 @@ class Service:
         self.mode = 'dictate'
         self.generation = 0
         self.latest = ''
+        self.latest_metadata = {}
         self.original = ''
         self.started = 0
         self.outcome = ''
@@ -197,7 +199,7 @@ class Service:
             if command == 'status':
                 return self.status()
             if command == 'result':
-                return {'text': self.latest, 'original': self.original}
+                return {'text': self.latest, 'original': self.original, **self.latest_metadata}
             if command == 'copy-last':
                 if self.latest:
                     copy_text(self.latest)
@@ -298,6 +300,7 @@ class Service:
                 if generation != self.generation:
                     return
                 self.latest, self.original = text, original
+                self.latest_metadata = {'app': app, 'mode': mode, 'created': datetime.now(timezone.utc).isoformat()}
                 if settings.get('history_enabled'):
                     History(CONFIG).add(app, mode, original, text)
                 same_window = target and active_window().get('address') == target

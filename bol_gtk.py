@@ -7,7 +7,7 @@ import gi
 
 gi.require_version('Gtk', '4.0')
 from gi.repository import Gtk, Gdk, GLib, Gio
-from bol_features import LANGUAGES, MODES, History, audio_level
+from bol_features import LANGUAGES, MODES, History, audio_level, history_date, filter_history
 from bol_providers import SPEECH_PROVIDERS, WRITING_PROVIDERS, detect_whisper, validate_speech
 from bol_ui import parse_pairs, format_pairs, apply_shortcuts
 
@@ -50,6 +50,19 @@ window.bol { background: #090909; color: #ececec; font-family: 'Noto Sans', sans
 .bol listbox row { padding: 10px; border-radius: 7px; }
 .bol listbox row:selected { background: #303030; }
 .bol popover contents { background: #242424; color: #eee; border: 1px solid #353535; border-radius: 10px; }
+.bol .history-toolbar { background: #111111; border: 1px solid #292929; border-radius: 10px; padding: 8px; }
+.bol .filter { background: transparent; border-color: transparent; color: #939393; padding: 7px 12px; }
+.bol button.filter:checked label { color: #f3f3f3; }
+.bol .filter:checked { background: #2a2a2a; color: #f3f3f3; border-color: #3a3a3a; }
+.bol .transcript { background: #141414; border: 1px solid #292929; border-radius: 12px; padding: 19px; }
+.bol .transcript:hover { border-color: #464646; background: #181818; }
+.bol .transcript-text { font-size: 14px; color: #e4e4e4; line-height: 1.6; }
+.bol .transcript-meta { color: #8c8c8c; font-size: 11px; }
+.bol .date-heading { color: #a0a0a0; font-size: 11px; font-weight: 600; margin-top: 12px; margin-bottom: 2px; }
+.bol .tag { background: #232323; border: 1px solid #333333; border-radius: 5px; padding: 3px 7px; color: #aaa; font-size: 10px; }
+.bol .quiet { background: transparent; border-color: transparent; color: #a0a0a0; padding: 6px 8px; }
+.bol .quiet:hover { background: #292929; border-color: #3b3b3b; color: white; }
+.bol .history-empty { background: #101010; border: 1px dashed #333333; border-radius: 12px; padding: 42px; }
 .bol scrollbar slider { background: #515151; min-width: 5px; border-radius: 4px; }
 '''
 
@@ -116,6 +129,9 @@ class Workspace:
         self.alive=True
         self.history_rows=[]
         self.history_request=0
+        self.history_kind='all'
+        self.history_latest={}
+        self.history_all=[]
         self.app=Gtk.Application(application_id='io.github.bol.Workspace', flags=Gio.ApplicationFlags.NON_UNIQUE)
         self.app.connect('activate', self.activate)
 
@@ -294,21 +310,128 @@ class Workspace:
         page.append(label('Example: my signature => Regards,\\nSarbjeet','muted',True))
 
     def build_history(self):
-        page=self.pages['History'];group=self.section(page,'Recent results','History is optional. Your latest result remains available until Bol restarts.')
-        toolbar=Gtk.Box(spacing=10);margins(toolbar,12)
-        self.history_search=Gtk.SearchEntry();self.history_search.set_placeholder_text('Search text, app, or date');self.history_search.set_hexpand(True)
-        self.history_search.connect('search-changed',lambda e:self.action(lambda:self.refresh_history(False)))
-        toolbar.append(self.history_search)
-        export=action_button('Export history','export');export.connect('clicked',lambda b:self.export_results(True));toolbar.append(export);group.append(toolbar)
-        self.history_list=Gtk.ListBox();self.history_list.set_selection_mode(Gtk.SelectionMode.SINGLE);self.history_list.connect('row-selected',self.history_selected)
-        self.empty=label('No saved results yet.','empty');self.history_list.set_placeholder(self.empty)
-        scroll=Gtk.ScrolledWindow();scroll.set_min_content_height(130);scroll.set_max_content_height(190);scroll.set_child(self.history_list);margins(scroll,8);group.append(scroll)
-        group=self.section(page,'Result preview','Review or edit the text before copying.')
-        self.editor(group,'result','',170)
-        actions=Gtk.FlowBox();actions.set_selection_mode(Gtk.SelectionMode.NONE);actions.set_homogeneous(False);actions.set_max_children_per_line(3);actions.set_column_spacing(8);actions.set_row_spacing(8)
-        for title,callback in [('Export text',lambda:self.export_results(False)),('Refresh',lambda:self.refresh_history()),('Copy result',self.copy_result),('Remember correction',self.remember),('Clear history',self.clear_history)]:
-            button=action_button(title,{'Export text':'export','Refresh':'refresh','Copy result':'copy','Remember correction':'memory','Clear history':'trash'}[title]);button.connect('clicked',lambda b,fn=callback:self.action(fn));actions.insert(button,-1)
-        page.append(actions)
+        page=self.pages['History']
+        overview=Gtk.Box(spacing=12)
+        self.history_summary=label('Your words, ready to use again.','muted');self.history_summary.set_hexpand(True);overview.append(self.history_summary)
+        self.history_saving=label('','tag');overview.append(self.history_saving)
+        settings_button=Gtk.Button(label='History settings');settings_button.add_css_class('quiet');settings_button.connect('clicked',lambda b:self.select('General'));overview.append(settings_button)
+        page.append(overview)
+        toolbar=Gtk.Box(spacing=8);toolbar.add_css_class('history-toolbar')
+        self.history_search=Gtk.Entry();self.history_search.set_placeholder_text('Search your transcripts');self.history_search.set_hexpand(True)
+        self.history_search.set_icon_from_paintable(Gtk.EntryIconPosition.PRIMARY,icon_paintable('search',16))
+        self.history_search.set_icon_activatable(Gtk.EntryIconPosition.PRIMARY,False)
+        self.history_search.connect('changed',self.history_search_changed);toolbar.append(self.history_search)
+        for text,icon,callback in [('Refresh','refresh',lambda:self.refresh_history()),('Export matching history','export',lambda:self.export_results(True))]:
+            button=Gtk.Button();button.set_child(svg_icon(icon,17));button.set_tooltip_text(text);button.add_css_class('quiet');button.connect('clicked',lambda b,fn=callback:self.action(fn));toolbar.append(button)
+        page.append(toolbar)
+        filters=Gtk.Box(spacing=5);first=None
+        for title,kind in [('All','all'),('Dictation','dictate'),('Voice edit','edit')]:
+            button=Gtk.ToggleButton(label=title);button.add_css_class('filter')
+            if first:button.set_group(first)
+            else:first=button;button.set_active(True)
+            button.connect('toggled',lambda b,k=kind:self.history_filter_changed(k) if b.get_active() else None);filters.append(button)
+        self.history_count=label('','muted');self.history_count.set_hexpand(True);self.history_count.set_xalign(1);filters.append(self.history_count);page.append(filters)
+        self.history_feed=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=12);page.append(self.history_feed)
+        self.history_empty=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=10);self.history_empty.add_css_class('history-empty');self.history_empty.set_halign(Gtk.Align.FILL)
+        self.history_empty.append(svg_icon('history',28))
+        self.history_empty_title=label('Your next idea starts here.','section-title');self.history_empty_title.set_halign(Gtk.Align.CENTER);self.history_empty.append(self.history_empty_title)
+        self.history_empty_hint=label('Press your dictation shortcut to begin. Your latest result appears here even when saving is off.','muted',True);self.history_empty_hint.set_max_width_chars(48);self.history_empty_hint.set_justify(Gtk.Justification.CENTER);self.history_empty_hint.set_halign(Gtk.Align.CENTER);self.history_empty.append(self.history_empty_hint)
+        page.append(self.history_empty)
+        # Keep the existing editable preview buffer for export/correction workflows.
+        scratch=Gtk.TextBuffer();self.buffers['result']=scratch
+        bottom=Gtk.Box(spacing=8)
+        self.history_privacy=label('Stored on this device. Audio is not retained.','muted',True);self.history_privacy.set_hexpand(True);bottom.append(self.history_privacy)
+        clear=Gtk.Button(label='Clear saved history');clear.add_css_class('quiet');clear.connect('clicked',lambda b:self.clear_history());bottom.append(clear);page.append(bottom)
+
+    def history_search_changed(self,*args):
+        source=getattr(self,'history_search_timer',None)
+        if source:GLib.source_remove(source)
+        def search():
+            self.history_search_timer=None
+            if self.alive:self.refresh_history(False)
+            return False
+        self.history_search_timer=GLib.timeout_add(180,search)
+
+    def history_filter_changed(self,kind):
+        self.history_kind=kind
+        self.render_history()
+
+    def render_history(self):
+        if not hasattr(self,'history_feed'):return
+        while child:=self.history_feed.get_first_child():self.history_feed.remove(child)
+        query=self.history_search.get_text()
+        self.history_rows=filter_history(self.history_all,query,self.history_kind)
+        saved=len(self.history_all);words=sum(len(row['result'].split()) for row in self.history_all)
+        self.history_summary.set_text(f'{saved:,} saved transcripts  ·  {words:,} words')
+        self.history_saving.set_text('Saving on' if self.core.config().get('history_enabled') else 'Saving off')
+        self.history_count.set_text(f'{len(self.history_rows)} result'+('' if len(self.history_rows)==1 else 's'))
+        latest=self.history_latest
+        memory_row=None
+        if latest.get('text'):
+            is_saved=any(row['result']==latest['text'] and (not latest.get('app') or row.get('app','')==latest.get('app','')) for row in self.history_all[:1])
+            if not is_saved:
+                memory_row={'id':None,'result':latest['text'],'original':latest.get('original',''),'app':latest.get('app') or 'This session','mode':latest.get('mode','session'),'created':latest.get('created','')}
+                if not filter_history([memory_row],query,self.history_kind):memory_row=None
+        count=len(self.history_rows)+int(memory_row is not None)
+        self.history_count.set_text(f'{count} result'+('' if count==1 else 's'))
+        if memory_row:
+            self.history_feed.append(label('Latest result','date-heading'));self.history_feed.append(self.transcript_card(memory_row,True))
+        previous_day=None
+        for row in self.history_rows:
+            day,_=history_date(row['created'])
+            if day!=previous_day:self.history_feed.append(label(day,'date-heading'));previous_day=day
+            self.history_feed.append(self.transcript_card(row))
+        empty=not self.history_rows and memory_row is None
+        self.history_empty.set_visible(empty)
+        self.history_empty_title.set_text('No matching transcripts' if query.strip() or self.history_kind!='all' else 'Your next idea starts here.')
+        self.history_empty_hint.set_text('Try a different search or select All.' if query.strip() or self.history_kind!='all' else 'Press your dictation shortcut to begin. Your latest result appears here even when saving is off.')
+
+    def transcript_card(self,row,memory=False):
+        card=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=14);card.add_css_class('transcript')
+        top=Gtk.Box(spacing=9)
+        app=label(row.get('app') or 'Unknown app','transcript-meta');app.set_ellipsize(3);app.set_hexpand(True);top.append(app)
+        top.append(label({'edit':'Voice edit','dictate':'Dictation'}.get(row.get('mode'),'Session result'),'tag'))
+        if memory:top.append(label('Not saved','tag'))
+        _,clock=history_date(row.get('created',''))
+        if clock:top.append(label(clock,'transcript-meta'))
+        card.append(top)
+        text=label(row['result'],'transcript-text',True);text.set_lines(5);text.set_ellipsize(3);text.set_max_width_chars(80);card.append(text)
+        bottom=Gtk.Box(spacing=8)
+        count=label(f'{len(row["result"].split())} words','transcript-meta');count.set_hexpand(True);bottom.append(count)
+        details=Gtk.Button(label='View transcript');details.add_css_class('quiet');details.connect('clicked',lambda b:self.transcript_details(row));bottom.append(details)
+        copy=action_button('Copy','copy');copy.add_css_class('quiet');copy.connect('clicked',lambda b:self.copy_history_row(row));bottom.append(copy)
+        card.append(bottom);return card
+
+    def copy_history_row(self,row):
+        self.core.copy_text(row['result']);self.status.set_text('Transcript copied')
+
+    def transcript_details(self,row):
+        dialog=Gtk.Window(title='Transcript',transient_for=self.window,modal=True);dialog.add_css_class('bol');dialog.set_default_size(660,610)
+        layout=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=18);margins(layout,24);dialog.set_child(layout)
+        heading=Gtk.Box(spacing=12);title=label('Transcript','section-title');title.set_hexpand(True);heading.append(title)
+        close=Gtk.Button(label='Close');close.connect('clicked',lambda b:dialog.close());heading.append(close);layout.append(heading)
+        day,clock=history_date(row.get('created',''))
+        layout.append(label(f'{row.get("app") or "This session"}  ·  {day} {clock}','muted'))
+        switcher=Gtk.Box(spacing=5);final=Gtk.ToggleButton(label='Result');final.set_active(True);original=Gtk.ToggleButton(label='Instruction' if row.get('mode')=='edit' else 'Original');original.set_group(final)
+        for button in [final,original]:button.add_css_class('filter');switcher.append(button)
+        layout.append(switcher)
+        scroll=Gtk.ScrolledWindow();scroll.set_vexpand(True);scroll.add_css_class('editor-frame')
+        view=Gtk.TextView();view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        for side in ['top','bottom','left','right']:getattr(view,'set_'+side+'_margin')(16)
+        buffer=view.get_buffer();buffer.set_text(row['result']);scroll.set_child(view);layout.append(scroll)
+        def version(button):
+            if button.get_active():buffer.set_text(row.get('original','') if button==original else row['result'])
+        final.connect('toggled',version);original.connect('toggled',version)
+        actions=Gtk.Box(spacing=8)
+        def copy_preview(button):
+            text=buffer.get_text(buffer.get_start_iter(),buffer.get_end_iter(),True);self.core.copy_text(text);self.status.set_text('Transcript copied')
+        def export_preview(button):
+            self.buffers['result'].set_text(buffer.get_text(buffer.get_start_iter(),buffer.get_end_iter(),True));self.export_results(False,dialog)
+        copy=action_button('Copy text','copy');copy.add_css_class('primary');copy.connect('clicked',copy_preview);actions.append(copy)
+        export=action_button('Export text','export');export.connect('clicked',export_preview);actions.append(export)
+        remember=Gtk.Button(label='Remember correction');remember.connect('clicked',lambda b:self.remember(dialog));actions.append(remember)
+        layout.append(actions);layout.append(label('Edits here affect copying and export, not the saved transcript.','muted',True))
+        dialog.present()
 
     def build_shortcuts(self):
         page=self.pages['Shortcuts'];group=self.section(page,'Keyboard')
@@ -349,32 +472,22 @@ class Workspace:
         except Exception as error:self.dialog('Could not save',str(error))
 
     def refresh_history(self, load_latest=True):
-        # Disk/socket work must not stall navigation or typing in the search field.
         self.history_request+=1
         token=self.history_request
-        query=self.history_search.get_text()
-        preview_before=self.text('result')
         def worker():
             try:
-                rows=History(self.core.CONFIG).list(query) if (self.core.CONFIG/'history.sqlite3').exists() else []
-                latest=self.core.request('result').get('text','') if load_latest else ''
-                GLib.idle_add(self.history_loaded,token,query,rows,latest,preview_before,None)
-            except Exception as error:
-                GLib.idle_add(self.history_loaded,token,query,[],None,preview_before,str(error))
+                rows=History(self.core.CONFIG).list() if (self.core.CONFIG/'history.sqlite3').exists() else []
+                latest=self.core.request('result') if load_latest else None
+                GLib.idle_add(self.history_loaded,token,rows,latest,None)
+            except Exception as error:GLib.idle_add(self.history_loaded,token,[],None,str(error))
         threading.Thread(target=worker,daemon=True).start()
 
-    def history_loaded(self,token,query,rows,latest,preview_before,error):
+    def history_loaded(self,token,rows,latest,error):
         if not self.alive or token!=self.history_request:return False
-        if error:
-            self.status.set_text(error);return False
-        while child:=self.history_list.get_first_child():self.history_list.remove(child)
-        self.history_rows=rows
-        for row in rows:
-            box=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=4)
-            preview=label(row['result'].replace('\n',' ')[:100]);preview.set_ellipsize(3);box.append(preview)
-            box.append(label(f'{row["created"]} UTC · {row["app"]}','muted'));self.history_list.append(box)
-        self.empty.set_text('No results match your search.' if query.strip() else 'No saved results yet.')
-        if latest and self.text('result')==preview_before:self.buffers['result'].set_text(latest)
+        if error:self.status.set_text(error);return False
+        self.history_all=rows
+        if latest is not None:self.history_latest=latest
+        self.render_history()
         return False
 
     def cancel_recording(self,*args):
@@ -391,16 +504,9 @@ class Workspace:
             self.cancel_button.set_sensitive(True);self.status.set_text(message)
         return False
 
-    def history_selected(self,listbox,row):
-        if row and row.get_index()<len(self.history_rows):self.buffers['result'].set_text(self.history_rows[row.get_index()]['result'])
-
-    def copy_result(self):
-        text=self.text('result')
-        if text:self.core.copy_text(text);self.status.set_text('Copied to clipboard')
-
-    def export_results(self, history=False):
+    def export_results(self, history=False, parent=None):
         if history:
-            data=History(self.core.CONFIG).list(self.history_search.get_text()) if (self.core.CONFIG/'history.sqlite3').exists() else []
+            data=filter_history(History(self.core.CONFIG).list(),self.history_search.get_text(),self.history_kind) if (self.core.CONFIG/'history.sqlite3').exists() else []
             if not data:
                 self.dialog('Nothing to export','No saved history matches the current search.');return
             payload=json.dumps(data,ensure_ascii=False,indent=2)+'\n'
@@ -408,7 +514,7 @@ class Workspace:
             payload=self.text('result')
             if not payload.strip():
                 self.dialog('Nothing to export','Dictate something or select a saved result first.');return
-        chooser=Gtk.FileChooserNative.new('Export history' if history else 'Export text',self.window,Gtk.FileChooserAction.SAVE,'Export','Cancel')
+        chooser=Gtk.FileChooserNative.new('Export history' if history else 'Export text',parent or self.window,Gtk.FileChooserAction.SAVE,'Export','Cancel')
         chooser.set_current_name('bol-history.json' if history else 'bol-result.txt')
         file_filter=Gtk.FileFilter();file_filter.set_name('JSON' if history else 'Text');file_filter.add_pattern('*.json' if history else '*.txt');chooser.add_filter(file_filter)
         def response(dialog,result):
@@ -478,8 +584,8 @@ class Workspace:
             d.destroy()
         dialog.connect('response',response);dialog.present()
 
-    def remember(self):
-        dialog=Gtk.Dialog(title='Remember correction',transient_for=self.window,modal=True)
+    def remember(self,parent=None):
+        dialog=Gtk.Dialog(title='Remember correction',transient_for=parent or self.window,modal=True)
         dialog.add_button('Cancel',Gtk.ResponseType.CANCEL);dialog.add_button('Remember',Gtk.ResponseType.ACCEPT)
         box=dialog.get_content_area();box.set_spacing(10);margins(box,22)
         box.append(label('Heard phrase'));old=Gtk.Entry();box.append(old)

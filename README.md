@@ -13,7 +13,8 @@ An independent voice typing and writing app for **Hyprland / Wayland**. Inspired
 - Recognition vocabulary (up to 50 terms), remembered spelling corrections, and spoken text snippets.
 - Latest-result recovery, optional private local history capped at 200 entries, copy and clear controls.
 - Local three-second microphone check with quiet-signal and clipping detection; the sample is never uploaded.
-- Search saved history by text, app, mode or date. Export filtered history as JSON or the current result as text. New exports use owner-only permissions.
+- Date-grouped transcript cards with app labels, word counts, inline copy and a Result/Original detail view (voice edits show the spoken Instruction). Latest unsaved results are marked separately.
+- Search saved history by text, app, mode or date; combine search with All / Dictation / Voice edit filters. Export filtered history as JSON or the current result as text. New exports use owner-only permissions.
 - Microphone node selection, adjustable recording limit (5–300 seconds), and automatic paste with terminal shortcuts.
 - Shortcut configuration with conflict checking and an optional hold-to-talk mode.
 
@@ -79,7 +80,7 @@ Open **Bol Voice Typing** from your app launcher, or run `~/.local/bin/bol setti
 - **Writing:** optional polish, global rules and per-app rules. Profiles use exact app classes, e.g. `Chatgpt => Preserve code identifiers; be concise`. The app can show currently open app classes. Writing rules apply to AI polish and voice editing, not raw dictation.
 - **Vocabulary:** one recognition hint per line. Add explicit corrections such as `sara vam => Sarvam`. Corrections match whole words/phrases and preserve unrelated text. Recognition hints go to the speech API.
 - **Snippets:** e.g. `my signature => Regards,\nSarbjeet`. Say only the trigger phrase to expand it. Use literal `\n` for line breaks.
-- **History:** search saved results, export matching history as JSON, export the current preview as text, edit/copy a result, explicitly remember a correction, or clear saved history. History saving must be enabled in General to retain new results.
+- **History:** browse cards grouped by local date, search and filter by interaction type, copy a card, or open View transcript to compare the final result with the original speech. In voice-edit entries, Instruction is what you asked Bol to do. The detail view supports temporary edits, copying, text export and remembered corrections; preview edits do not alter saved history. Export history respects both search and type filters. History saving must be enabled in General to retain new results; unsaved session results are clearly marked.
 - **Shortcuts:** customize keys, toggle hold-to-talk, and choose an editing key.
 
 ## Privacy and recovery

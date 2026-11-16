@@ -144,3 +144,25 @@ def audio_level(path):
     return {'seconds': seconds, 'peak_db': round(20 * math.log10(max(peak, 1e-8)), 1),
             'rms_db': round(20 * math.log10(max(rms, 1e-8)), 1),
             'clipping': peak >= .99, 'quiet': rms < .003}
+
+
+def history_date(created, now=None):
+    """UI date groups use local calendar days; stored SQLite timestamps remain UTC."""
+    from datetime import datetime, timezone, timedelta
+    now = now or datetime.now().astimezone()
+    try:
+        stamp = datetime.fromisoformat(created)
+        if stamp.tzinfo is None:stamp = stamp.replace(tzinfo=timezone.utc)
+        stamp = stamp.astimezone(now.tzinfo)
+    except (ValueError,TypeError):
+        return 'This session', ''
+    if stamp.date()==now.date():day='Today'
+    elif stamp.date()==now.date()-timedelta(days=1):day='Yesterday'
+    else:day=stamp.strftime('%d %b %Y')
+    return day, stamp.strftime('%H:%M')
+
+
+def filter_history(rows, query='', kind='all'):
+    query=query.strip().casefold()
+    return [row for row in rows if (kind=='all' or row.get('mode')==kind) and
+            (not query or any(query in str(row.get(key,'' )).casefold() for key in ['app','mode','created','original','result']))]
