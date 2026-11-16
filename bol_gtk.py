@@ -1,6 +1,7 @@
 """Native GTK 4 settings workspace for Bol."""
 import json
 import threading
+from functools import lru_cache
 from pathlib import Path
 import gi
 
@@ -11,44 +12,44 @@ from bol_providers import SPEECH_PROVIDERS, WRITING_PROVIDERS, detect_whisper, v
 from bol_ui import parse_pairs, format_pairs, apply_shortcuts
 
 CSS = b'''
-window.bol { background: #202022; color: #ececec; font-family: 'Noto Sans', sans-serif; font-size: 13px; }
-.bol headerbar { background: #202022; box-shadow: none; border-bottom: 1px solid #303030; min-height: 40px; }
-.bol .sidebar { background: #18181a; border-right: 1px solid #303030; }
+window.bol { background: #090909; color: #ececec; font-family: 'Noto Sans', sans-serif; font-size: 13px; }
+.bol headerbar { background: #090909; box-shadow: none; border-bottom: 1px solid #242424; min-height: 40px; }
+.bol .sidebar { background: #0c0c0c; border-right: 1px solid #242424; }
 .bol .brand { font-size: 18px; font-weight: 650; color: #f5f5f5; }
 .bol .nav-heading { font-size: 11px; color: #858585; font-weight: 500; }
-.bol .nav-button { background: transparent; color: #aaa; border: none; box-shadow: none; border-radius: 7px; padding: 10px 12px; font-weight: 400; }
+.bol .nav-button { background: transparent; color: #aaa; border: none; box-shadow: none; border-radius: 7px; padding: 10px 12px; font-weight: 400; transition: background-color 120ms ease-in-out, color 120ms ease-in-out; }
 .bol .nav-button:hover { background: #242424; color: #eee; }
-.bol .nav-button.selected { background: #303030; color: #f5f5f5; }
+.bol .nav-button.selected { background: #242424; color: #f5f5f5; }
 .bol .page-title { font-size: 30px; font-weight: 600; letter-spacing: -0.6px; }
 .bol .muted { color: #929292; font-size: 12px; }
 .bol .section-title { color: #ddd; font-size: 13px; font-weight: 600; }
-.bol .group { background: #262626; border: 1px solid #353537; border-radius: 10px; }
+.bol .group { background: #141414; border: 1px solid #292929; border-radius: 10px; }
 .bol .row-title { font-weight: 500; color: #e4e4e4; }
 .bol .row-hint { font-size: 11px; color: #999; }
-.bol separator { background: #373737; min-height: 1px; }
-.bol entry, .bol passwordentry, .bol dropdown > button, .bol spinbutton { background: #2b2b2e; color: #eee; border: 1px solid #414144; border-radius: 8px; box-shadow: none; min-height: 34px; }
+.bol separator { background: #292929; min-height: 1px; }
+.bol entry, .bol passwordentry, .bol dropdown > button, .bol spinbutton { background: #191919; color: #eee; border: 1px solid #333333; border-radius: 8px; box-shadow: none; min-height: 34px; }
 .bol entry:focus-within, .bol passwordentry:focus-within { border-color: #929292; outline: none; }
 .bol passwordentry entry, .bol spinbutton entry { border: none; background: transparent; }
-.bol button { background: #303030; color: #ddd; border: 1px solid #444; border-radius: 8px; box-shadow: none; padding: 8px 12px; }
-.bol button:hover { background: #3a3a3a; }
+.bol button { background: #242424; color: #ddd; border: 1px solid #333; border-radius: 8px; box-shadow: none; padding: 8px 12px; transition: background-color 120ms ease-in-out, border-color 120ms ease-in-out; }
+.bol button:hover { background: #303030; }
 .bol button.primary { background: #ededed; color: #171717; border-color: #ededed; font-weight: 600; }
 .bol button.primary:hover { background: white; }
-.bol button.primary:disabled { background: #393939; color: #858585; border-color: #393939; }
+.bol button.primary:disabled { background: #222222; color: #858585; border-color: #222222; }
 .bol switch { background: #505050; border: none; min-width: 38px; min-height: 22px; }
 .bol switch:checked { background: #e0e0e0; }
 .bol switch slider { background: #bdbdbd; border: none; box-shadow: none; }
 .bol switch:checked slider { background: #252525; }
-.bol textview, .bol textview text { background: #262626; color: #e4e4e4; }
+.bol textview, .bol textview text { background: #141414; color: #e4e4e4; }
 .bol textview { border-radius: 8px; padding: 12px; font-size: 13px; }
 .bol .editor-frame { border: 1px solid #424242; border-radius: 9px; }
-.bol .footer { background: #202022; border-top: 1px solid #343434; }
+.bol .footer { background: #090909; border-top: 1px solid #252525; }
 .bol .status { color: #bdbdbd; font-size: 11px; }
-.bol .key { background: #292929; color: #b8b8b8; border: 1px solid #3b3b3b; border-radius: 5px; font-size: 10px; padding: 3px 6px; }
+.bol .key { background: #292929; color: #b8b8b8; border: 1px solid #303030; border-radius: 5px; font-size: 10px; padding: 3px 6px; }
 .bol .empty { color: #868686; padding: 25px; }
 .bol listbox { background: transparent; }
 .bol listbox row { padding: 10px; border-radius: 7px; }
-.bol listbox row:selected { background: #3b3b3b; }
-.bol popover contents { background: #303030; color: #eee; border: 1px solid #484848; border-radius: 10px; }
+.bol listbox row:selected { background: #303030; }
+.bol popover contents { background: #242424; color: #eee; border: 1px solid #353535; border-radius: 10px; }
 .bol scrollbar slider { background: #515151; min-width: 5px; border-radius: 4px; }
 '''
 
@@ -68,9 +69,14 @@ PAGES = [
 ICON_DIR = Path(__file__).resolve().parent / 'icons'
 
 
-def svg_icon(name, size=18):
+@lru_cache(maxsize=48)
+def icon_paintable(name, size):
     file = Gio.File.new_for_path(str(ICON_DIR / (name + '.svg')))
-    paintable = Gtk.IconPaintable.new_for_file(file, size, 1)
+    return Gtk.IconPaintable.new_for_file(file, size, 1)
+
+
+def svg_icon(name, size=18):
+    paintable = icon_paintable(name, size)
     image = Gtk.Image.new_from_paintable(paintable)
     image.set_pixel_size(size)
     return image
@@ -109,6 +115,7 @@ class Workspace:
         self.loading=True
         self.alive=True
         self.history_rows=[]
+        self.history_request=0
         self.app=Gtk.Application(application_id='io.github.bol.Workspace', flags=Gio.ApplicationFlags.NON_UNIQUE)
         self.app.connect('activate', self.activate)
 
@@ -146,7 +153,7 @@ class Workspace:
             row=Gtk.Box();name=label(title,'muted');name.set_hexpand(True);row.append(name)
             value=label(self.settings.get(key,''),'key');row.append(value);self.key_labels[key]=value;quick.append(row)
         side.append(quick)
-        powered=label('Powered by Sarvam','muted');margins(powered,22);side.append(powered)
+        powered=label('Voice workspace for Linux','muted');margins(powered,22);side.append(powered)
         main=Gtk.Box(orientation=Gtk.Orientation.VERTICAL);main.set_hexpand(True);layout.append(main)
         self.stack=Gtk.Stack();self.stack.set_vexpand(True);self.stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE);self.stack.set_transition_duration(120);main.append(self.stack)
         self.pages={}
@@ -160,7 +167,7 @@ class Workspace:
         inner=Gtk.Box(spacing=12);margins(inner,18);inner.set_hexpand(True);footer.append(inner)
         self.save_note=label('All changes saved','muted');self.save_note.set_hexpand(True);inner.append(self.save_note)
         self.status=label('Ready','status');self.status.set_ellipsize(3);self.status.set_max_width_chars(28);inner.append(self.status)
-        self.cancel_button=action_button('Cancel recording','cancel');cancel=self.cancel_button;cancel.set_visible(False);cancel.connect('clicked',lambda b:self.action(lambda:self.core.request('cancel')));inner.append(cancel)
+        self.cancel_button=action_button('Cancel recording','cancel');cancel=self.cancel_button;cancel.set_visible(False);cancel.connect('clicked',self.cancel_recording);inner.append(cancel)
         self.save_button=Gtk.Button(label='Save changes');self.save_button.add_css_class('primary');self.save_button.set_sensitive(False);self.save_button.connect('clicked',self.save);inner.append(self.save_button)
         main.append(footer)
         self.build_general();self.build_providers();self.build_writing();self.build_vocabulary();self.build_snippets();self.build_history();self.build_shortcuts()
@@ -342,16 +349,47 @@ class Workspace:
         except Exception as error:self.dialog('Could not save',str(error))
 
     def refresh_history(self, load_latest=True):
+        # Disk/socket work must not stall navigation or typing in the search field.
+        self.history_request+=1
+        token=self.history_request
+        query=self.history_search.get_text()
+        preview_before=self.text('result')
+        def worker():
+            try:
+                rows=History(self.core.CONFIG).list(query) if (self.core.CONFIG/'history.sqlite3').exists() else []
+                latest=self.core.request('result').get('text','') if load_latest else ''
+                GLib.idle_add(self.history_loaded,token,query,rows,latest,preview_before,None)
+            except Exception as error:
+                GLib.idle_add(self.history_loaded,token,query,[],None,preview_before,str(error))
+        threading.Thread(target=worker,daemon=True).start()
+
+    def history_loaded(self,token,query,rows,latest,preview_before,error):
+        if not self.alive or token!=self.history_request:return False
+        if error:
+            self.status.set_text(error);return False
         while child:=self.history_list.get_first_child():self.history_list.remove(child)
-        self.history_rows=History(self.core.CONFIG).list(self.history_search.get_text()) if (self.core.CONFIG/'history.sqlite3').exists() else []
-        for row in self.history_rows:
+        self.history_rows=rows
+        for row in rows:
             box=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=4)
             preview=label(row['result'].replace('\n',' ')[:100]);preview.set_ellipsize(3);box.append(preview)
             box.append(label(f'{row["created"]} UTC · {row["app"]}','muted'));self.history_list.append(box)
-        self.empty.set_text('No results match your search.' if self.history_search.get_text().strip() else 'No saved results yet.')
-        if load_latest:
-            latest=self.core.request('result').get('text','')
-            if latest:self.buffers['result'].set_text(latest)
+        self.empty.set_text('No results match your search.' if query.strip() else 'No saved results yet.')
+        if latest and self.text('result')==preview_before:self.buffers['result'].set_text(latest)
+        return False
+
+    def cancel_recording(self,*args):
+        self.cancel_button.set_sensitive(False)
+        def worker():
+            try:
+                self.core.request('cancel');message='Recording cancelled'
+            except Exception as error:message=str(error)
+            GLib.idle_add(self.cancel_finished,message)
+        threading.Thread(target=worker,daemon=True).start()
+
+    def cancel_finished(self,message):
+        if self.alive:
+            self.cancel_button.set_sensitive(True);self.status.set_text(message)
+        return False
 
     def history_selected(self,listbox,row):
         if row and row.get_index()<len(self.history_rows):self.buffers['result'].set_text(self.history_rows[row.get_index()]['result'])
@@ -483,8 +521,9 @@ class Workspace:
     def status_update(self,text,busy=False):
         self.polling=False
         if self.alive:
-            self.status.set_text(text);self.status.set_tooltip_text(text)
-            self.cancel_button.set_visible(busy)
+            if self.status.get_text()!=text:
+                self.status.set_text(text);self.status.set_tooltip_text(text)
+            if self.cancel_button.get_visible()!=busy:self.cancel_button.set_visible(busy)
         return False
 
     def on_close(self,*args):
