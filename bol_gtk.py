@@ -9,18 +9,19 @@ gi.require_version('Gtk', '4.0')
 from gi.repository import Gtk, Gdk, GLib, Gio
 from bol_features import LANGUAGES, MODES, History, audio_level, history_date, filter_history
 from bol_providers import SPEECH_PROVIDERS, WRITING_PROVIDERS, detect_whisper, validate_speech
+from bol_audio import synthesize, TTS_LANGUAGES, TTS_VOICES
 from bol_ui import parse_pairs, format_pairs, apply_shortcuts
 
 CSS = b'''
 window.bol { background: #090909; color: #ececec; font-family: 'Noto Sans', sans-serif; font-size: 13px; }
 .bol headerbar { background: #090909; box-shadow: none; border-bottom: 1px solid #242424; min-height: 40px; }
 .bol .sidebar { background: #0c0c0c; border-right: 1px solid #242424; }
-.bol .brand { font-size: 18px; font-weight: 650; color: #f5f5f5; }
+.bol .brand { font-size: 18px; font-weight: 700; color: #8cf3c2; }
 .bol .nav-heading { font-size: 11px; color: #858585; font-weight: 500; }
-.bol .nav-button { background: transparent; color: #aaa; border: none; box-shadow: none; border-radius: 7px; padding: 10px 12px; font-weight: 400; transition: background-color 120ms ease-in-out, color 120ms ease-in-out; }
+.bol .nav-button { background: transparent; color: #aaa; border: none; box-shadow: none; border-radius: 7px; padding: 10px 12px; font-weight: 550; transition: background-color 120ms ease-in-out, color 120ms ease-in-out; }
 .bol .nav-button:hover { background: #242424; color: #eee; }
 .bol .nav-button.selected { background: #242424; color: #f5f5f5; }
-.bol .page-title { font-size: 30px; font-weight: 600; letter-spacing: -0.6px; }
+.bol .page-title { font-size: 30px; font-weight: 700; letter-spacing: -0.6px; }
 .bol .muted { color: #929292; font-size: 12px; }
 .bol .section-title { color: #ddd; font-size: 13px; font-weight: 600; }
 .bol .group { background: #141414; border: 1px solid #292929; border-radius: 10px; }
@@ -28,15 +29,15 @@ window.bol { background: #090909; color: #ececec; font-family: 'Noto Sans', sans
 .bol .row-hint { font-size: 11px; color: #999; }
 .bol separator { background: #292929; min-height: 1px; }
 .bol entry, .bol passwordentry, .bol dropdown > button, .bol spinbutton { background: #191919; color: #eee; border: 1px solid #333333; border-radius: 8px; box-shadow: none; min-height: 34px; }
-.bol entry:focus-within, .bol passwordentry:focus-within { border-color: #83b8ff; outline: none; }
+.bol entry:focus-within, .bol passwordentry:focus-within { border-color: #4da3ff; outline: none; }
 .bol passwordentry entry, .bol spinbutton entry { border: none; background: transparent; }
 .bol button { background: #242424; color: #ddd; border: 1px solid #333; border-radius: 8px; box-shadow: none; padding: 8px 12px; transition: background-color 120ms ease-in-out, border-color 120ms ease-in-out; }
 .bol button:hover { background: #303030; }
-.bol button.primary { background: #95bfff; color: #101823; border-color: #95bfff; font-weight: 600; }
-.bol button.primary:hover { background: #b4d2ff; border-color: #b4d2ff; }
+.bol button.primary { background: #65b0ff; color: #101823; border-color: #65b0ff; font-weight: 600; }
+.bol button.primary:hover { background: #91c7ff; border-color: #91c7ff; }
 .bol button.primary:disabled { background: #222222; color: #858585; border-color: #222222; }
 .bol switch { background: #505050; border: none; min-width: 38px; min-height: 22px; }
-.bol switch:checked { background: #83b8ff; }
+.bol switch:checked { background: #4da3ff; }
 .bol switch slider { background: #bdbdbd; border: none; box-shadow: none; }
 .bol switch:checked slider { background: #142039; }
 .bol textview, .bol textview text { background: #141414; color: #e4e4e4; }
@@ -63,39 +64,71 @@ window.bol { background: #090909; color: #ececec; font-family: 'Noto Sans', sans
 .bol .quiet { background: transparent; border-color: transparent; color: #a0a0a0; padding: 6px 8px; }
 .bol .quiet:hover { background: #292929; border-color: #3b3b3b; color: white; }
 .bol .history-empty { background: #101010; border: 1px dashed #333333; border-radius: 12px; padding: 42px; }
-.bol .nav-button.nav-general.selected { background: #152235; border: 1px solid #2c4666; color: #83b8ff; }
-.bol .nav-button.nav-general.selected label { color: #83b8ff; }
-.bol .nav-button.nav-providers.selected { background: #251b36; border: 1px solid #493764; color: #bca1ff; }
-.bol .nav-button.nav-providers.selected label { color: #bca1ff; }
-.bol .nav-button.nav-writing.selected { background: #2d2317; border: 1px solid #59432a; color: #f0bb72; }
-.bol .nav-button.nav-writing.selected label { color: #f0bb72; }
-.bol .nav-button.nav-vocabulary.selected { background: #152a21; border: 1px solid #2b5140; color: #83d6ae; }
-.bol .nav-button.nav-vocabulary.selected label { color: #83d6ae; }
-.bol .nav-button.nav-snippets.selected { background: #2d1b29; border: 1px solid #58354d; color: #f39ec9; }
-.bol .nav-button.nav-snippets.selected label { color: #f39ec9; }
-.bol .nav-button.nav-history.selected { background: #15292d; border: 1px solid #2c4f56; color: #7fd7e0; }
-.bol .nav-button.nav-history.selected label { color: #7fd7e0; }
-.bol .nav-button.nav-shortcuts.selected { background: #222235; border: 1px solid #414267; color: #b5b7f6; }
-.bol .nav-button.nav-shortcuts.selected label { color: #b5b7f6; }
-.bol .tag-dictation { background: #142b23; color: #9eddbc; border-color: #2b4b3c; }
-.bol .tag-edit { background: #261d35; color: #c5aff4; border-color: #493762; }
-.bol .tag-unsaved { background: #302417; color: #e6bf89; border-color: #58432a; }
-.bol .saving-on { background: #142b23; color: #9eddbc; border-color: #2b4b3c; }
-.bol .saving-off { background: #302417; color: #e6bf89; border-color: #58432a; }
+.bol .nav-button.nav-general.selected { background: #152235; border: 1px solid #2c4666; color: #4da3ff; }
+.bol .nav-button.nav-general.selected label { color: #4da3ff; }
+.bol .nav-button.nav-providers.selected { background: #251b36; border: 1px solid #493764; color: #ad78ff; }
+.bol .nav-button.nav-providers.selected label { color: #ad78ff; }
+.bol .nav-button.nav-writing.selected { background: #2d2317; border: 1px solid #59432a; color: #ffb53f; }
+.bol .nav-button.nav-writing.selected label { color: #ffb53f; }
+.bol .nav-button.nav-vocabulary.selected { background: #152a21; border: 1px solid #2b5140; color: #43e3a1; }
+.bol .nav-button.nav-vocabulary.selected label { color: #43e3a1; }
+.bol .nav-button.nav-snippets.selected { background: #2d1b29; border: 1px solid #58354d; color: #ff72c2; }
+.bol .nav-button.nav-snippets.selected label { color: #ff72c2; }
+.bol .nav-button.nav-history.selected { background: #15292d; border: 1px solid #2c4f56; color: #39dcea; }
+.bol .nav-button.nav-history.selected label { color: #39dcea; }
+.bol .nav-button.nav-shortcuts.selected { background: #222235; border: 1px solid #414267; color: #9b92ff; }
+.bol .nav-button.nav-shortcuts.selected label { color: #9b92ff; }
+.bol .tag-dictation { background: #142b23; color: #65efaf; border-color: #2b4b3c; }
+.bol .tag-edit { background: #261d35; color: #c29aff; border-color: #493762; }
+.bol .tag-unsaved { background: #302417; color: #ffd071; border-color: #58432a; }
+.bol .saving-on { background: #142b23; color: #65efaf; border-color: #2b4b3c; }
+.bol .saving-off { background: #302417; color: #ffd071; border-color: #58432a; }
 .bol .destructive { color: #f0a0ae; }
 .bol .destructive:hover { background: #351b23; border-color: #623541; }
+.bol .nav-button.nav-general.selected { background-image: linear-gradient(to bottom, #163352, #15151a); border-color: #4da3ff; box-shadow: inset 0 1px 0 alpha(#4da3ff, 0.22), 0 0 9px alpha(#4da3ff, 0.08); }
+.bol .page-general .section-title { color: #4da3ff; }
+.bol .nav-button.nav-providers.selected { background-image: linear-gradient(to bottom, #34204b, #15151a); border-color: #ad78ff; box-shadow: inset 0 1px 0 alpha(#ad78ff, 0.22), 0 0 9px alpha(#ad78ff, 0.08); }
+.bol .page-providers .section-title { color: #ad78ff; }
+.bol .nav-button.nav-writing.selected { background-image: linear-gradient(to bottom, #3b2c13, #15151a); border-color: #ffb53f; box-shadow: inset 0 1px 0 alpha(#ffb53f, 0.22), 0 0 9px alpha(#ffb53f, 0.08); }
+.bol .page-writing .section-title { color: #ffb53f; }
+.bol .nav-button.nav-vocabulary.selected { background-image: linear-gradient(to bottom, #103c2b, #15151a); border-color: #43e3a1; box-shadow: inset 0 1px 0 alpha(#43e3a1, 0.22), 0 0 9px alpha(#43e3a1, 0.08); }
+.bol .page-vocabulary .section-title { color: #43e3a1; }
+.bol .nav-button.nav-snippets.selected { background-image: linear-gradient(to bottom, #3d1d32, #15151a); border-color: #ff72c2; box-shadow: inset 0 1px 0 alpha(#ff72c2, 0.22), 0 0 9px alpha(#ff72c2, 0.08); }
+.bol .page-snippets .section-title { color: #ff72c2; }
+.bol .nav-button.nav-history.selected { background-image: linear-gradient(to bottom, #10383e, #15151a); border-color: #39dcea; box-shadow: inset 0 1px 0 alpha(#39dcea, 0.22), 0 0 9px alpha(#39dcea, 0.08); }
+.bol .page-history .section-title { color: #39dcea; }
+.bol .nav-button.nav-shortcuts.selected { background-image: linear-gradient(to bottom, #2b2748, #15151a); border-color: #9b92ff; box-shadow: inset 0 1px 0 alpha(#9b92ff, 0.22), 0 0 9px alpha(#9b92ff, 0.08); }
+.bol .page-shortcuts .section-title { color: #9b92ff; }
+.bol button.primary { background-image: linear-gradient(to bottom, #8dc5ff, #4a99f5); font-weight: 700; box-shadow: inset 0 1px 0 #c0dfff, 0 2px 8px alpha(#388cff, 0.18); }
+.bol button.primary:disabled { background-image: none; box-shadow: none; }
+.bol .filter:checked { border-color: #4da3ff; background-image: linear-gradient(to bottom, #1d426c, #152a44); }
+.bol .tag { font-weight: 600; }
+.bol .key { color: #b6acff; background: #231e39; border-color: #4c416d; font-weight: 600; }
+.bol .transcript:hover { border-color: #296771; }
+.bol .history-toolbar:focus-within { border-color: #2a8d9b; }
+.bol .copy-action { color: #65efaf; background: #102b21; border-color: #285640; }
+.bol .copy-action:hover { background: #184333; border-color: #43e3a1; }
+.bol .export-action { color: #77e5f0; background: #10272c; border-color: #28515b; }
+.bol .export-action:hover { background: #163943; border-color: #39dcea; }
+.bol .memory-action { color: #ffd071; background: #302415; border-color: #5b4323; }
+.bol .memory-action:hover { background: #48351c; border-color: #ffb53f; }
+.bol .status { color: #94c6ff; }
+.bol .date-heading { color: #7edce5; }
+.bol .nav-button.nav-text-to-audio.selected { background: linear-gradient(to bottom, #422113, #17100c); border-color: #ff9b55; color: #ffbd88; }
+.bol .nav-button.nav-text-to-audio.selected label, .bol .page-text-to-audio .section-title { color: #ffbd88; }
 .bol scrollbar slider { background: #515151; min-width: 5px; border-radius: 4px; }
 '''
 
 LANGUAGE_NAMES = dict(zip(LANGUAGES, ['Detect automatically','English','Hindi','Punjabi','Bengali','Kannada','Malayalam','Marathi','Odia','Tamil','Telugu','Gujarati','Assamese','Urdu','Nepali','Konkani','Sanskrit','Sindhi','Kashmiri','Dogri','Bodo','Manipuri','Maithili','Santali']))
 MODE_NAMES = dict(zip(MODES, ['Original language','Mixed language & script','Roman script','Translate to English','Word for word']))
 PAGES = [
+    ('History','history','Review and recover your recent results.'),
+    ('Text to Audio','audio','Turn your words into natural speech.'),
     ('General','general','Connection, language, and recording preferences.'),
     ('Providers','providers','Choose local models and connect speech or writing APIs.'),
     ('Writing','writing','Writing preferences and application-specific styles.'),
     ('Vocabulary','vocabulary','Recognition hints and preferred spellings.'),
     ('Snippets','snippets','Expand a spoken phrase into reusable text.'),
-    ('History','history','Review and recover your recent results.'),
     ('Shortcuts','shortcuts','Keyboard shortcuts and recording controls.'),
 ]
 
@@ -118,6 +151,7 @@ def svg_icon(name, size=18):
 
 def action_button(title, icon_name):
     button = Gtk.Button()
+    if icon_name in ['copy','export','memory']:button.add_css_class(icon_name+'-action')
     content = Gtk.Box(spacing=8)
     content.set_halign(Gtk.Align.CENTER)
     content.append(svg_icon(icon_name,16))
@@ -153,6 +187,10 @@ class Workspace:
         self.history_kind='all'
         self.history_latest={}
         self.history_all=[]
+        self.audio_generation=0
+        self.audio_path=None
+        self.audio_directory=None
+        self.audio_player=None
         self.app=Gtk.Application(application_id='io.github.bol.Workspace', flags=Gio.ApplicationFlags.NON_UNIQUE)
         self.app.connect('activate', self.activate)
 
@@ -179,7 +217,7 @@ class Workspace:
         navtitle=label('Workspace','nav-heading');navtitle.set_margin_start(22);navtitle.set_margin_top(9);navtitle.set_margin_bottom(8);side.append(navtitle)
         self.nav={}
         for title,icon_name,description in PAGES:
-            button=Gtk.Button();button.add_css_class('nav-button');button.add_css_class('nav-'+title.lower());button.set_margin_start(10);button.set_margin_end(10)
+            button=Gtk.Button();button.add_css_class('nav-button');button.add_css_class('nav-'+title.lower().replace(' ','-'));button.set_margin_start(10);button.set_margin_end(10)
             row=Gtk.Box(spacing=12);image=svg_icon(icon_name,18)
             row.append(image);row.append(label(title));button.set_child(row)
             button.connect('clicked',lambda b,name=title:self.select(name));side.append(button);self.nav[title]=button
@@ -196,7 +234,7 @@ class Workspace:
         self.pages={}
         for title,icon_name,description in PAGES:
             scroller=Gtk.ScrolledWindow();scroller.set_policy(Gtk.PolicyType.NEVER,Gtk.PolicyType.AUTOMATIC)
-            page=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=20);margins(page,42);scroller.set_child(page)
+            page=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=20);page.add_css_class('page-'+title.lower().replace(' ','-'));margins(page,42);scroller.set_child(page)
             heading=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=8);heading.set_margin_bottom(9)
             heading.append(label(title,'page-title'));heading.append(label(description,'muted',True));page.append(heading)
             self.stack.add_named(scroller,title);self.pages[title]=page
@@ -208,8 +246,8 @@ class Workspace:
         self.cancel_button=action_button('Cancel recording','cancel');cancel=self.cancel_button;cancel.set_visible(False);cancel.connect('clicked',self.cancel_recording);inner.append(cancel)
         self.save_button=Gtk.Button(label='Save changes');self.save_button.add_css_class('primary');self.save_button.set_sensitive(False);self.save_button.connect('clicked',self.save);inner.append(self.save_button)
         main.append(footer)
-        self.build_general();self.build_providers();self.build_writing();self.build_vocabulary();self.build_snippets();self.build_history();self.build_shortcuts()
-        self.update_provider_sections();self.loading=False;self.select('General');self.window.present()
+        self.build_audio();self.build_general();self.build_providers();self.build_writing();self.build_vocabulary();self.build_snippets();self.build_history();self.build_shortcuts()
+        self.update_provider_sections();self.loading=False;self.select('History');self.window.present()
         GLib.timeout_add(800,self.poll)
 
     def section(self,page,title,description=None):
@@ -250,8 +288,112 @@ class Workspace:
         scroller.add_css_class('editor-frame');margins(scroller,14)
         view=Gtk.TextView();view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR);view.set_top_margin(12);view.set_bottom_margin(12);view.set_left_margin(12);view.set_right_margin(12)
         buffer=view.get_buffer();buffer.set_text(text)
-        if key!='result':buffer.connect('changed',self.changed)
+        if key not in ['result','tts_text']:buffer.connect('changed',self.changed)
         self.buffers[key]=buffer;scroller.set_child(view);group.append(scroller);return buffer
+
+    def build_audio(self):
+        page=self.pages['Text to Audio']
+        group=self.section(page,'Text to speak','Powered by Sarvam Bulbul v3. Text is sent only when you choose Generate audio; API credits may be used.')
+        self.editor(group,'tts_text','',210)
+        self.audio_characters=label('0 / 2,500 characters','muted');page.append(self.audio_characters)
+        self.buffers['tts_text'].connect('changed',lambda b:self.audio_characters.set_text(f'{len(self.text("tts_text")):,} / 2,500 characters'))
+        group=self.section(page,'Voice settings')
+        self.audio_language=Gtk.DropDown.new_from_strings([LANGUAGE_NAMES.get(v,v) for v in TTS_LANGUAGES]);self.audio_language.set_size_request(245,-1)
+        self.row(group,'Language','The language of the text you want spoken.',self.audio_language)
+        self.audio_voice=Gtk.DropDown.new_from_strings([v.capitalize() for v in TTS_VOICES]);self.audio_voice.set_size_request(245,-1)
+        self.row(group,'Voice','Choose the speaker used for generation.',self.audio_voice)
+        self.audio_pace=Gtk.SpinButton.new_with_range(.5,2,.1);self.audio_pace.set_digits(1);self.audio_pace.set_value(1)
+        self.row(group,'Speaking speed','1.0 is the natural speaking pace.',self.audio_pace)
+        actions=Gtk.FlowBox();actions.set_selection_mode(Gtk.SelectionMode.NONE);actions.set_homogeneous(False);actions.set_column_spacing(8);actions.set_row_spacing(8);actions.set_max_children_per_line(3)
+        self.audio_generate=Gtk.Button(label='Generate audio');self.audio_generate.add_css_class('primary');self.audio_generate.connect('clicked',self.generate_audio);actions.insert(self.audio_generate,-1)
+        self.audio_cancel=Gtk.Button(label='Cancel generation');self.audio_cancel.set_sensitive(False);self.audio_cancel.connect('clicked',self.cancel_audio);actions.insert(self.audio_cancel,-1)
+        reuse=Gtk.Button(label='Use latest transcript');reuse.connect('clicked',self.audio_from_latest);actions.insert(reuse,-1);page.append(actions)
+        group=self.section(page,'Generated audio')
+        self.audio_note=label('Generate a clip to play it here or save it as a WAV file.','muted',True);margins(self.audio_note,16);group.append(self.audio_note)
+        player=Gtk.Box(spacing=8);margins(player,16)
+        self.audio_play=action_button('Play','play');self.audio_play.set_sensitive(False);self.audio_play.connect('clicked',self.play_audio);player.append(self.audio_play)
+        stop=action_button('Stop','cancel');stop.connect('clicked',lambda b:self.stop_audio());player.append(stop)
+        self.audio_save=action_button('Save WAV','export');self.audio_save.set_sensitive(False);self.audio_save.connect('clicked',self.save_audio);player.append(self.audio_save);group.append(player)
+        page.append(label('Generated audio is temporary until you save it. Closing Bol deletes the temporary clip. Audio is not played automatically.','muted',True))
+
+    def generate_audio(self,*args):
+        text=self.text('tts_text')
+        if not text.strip() or len(text.strip())>2500:self.dialog('Check your text','Enter between 1 and 2500 characters.');return
+        key=self.core.config().get('api_key','')
+        if not key:self.dialog('Sarvam key required','Add your Sarvam API key in Providers.');return
+        language=TTS_LANGUAGES[self.audio_language.get_selected()];voice=TTS_VOICES[self.audio_voice.get_selected()];pace=self.audio_pace.get_value()
+        self.audio_generation+=1;generation=self.audio_generation
+        self.audio_generate.set_sensitive(False);self.audio_cancel.set_sensitive(True);self.audio_note.set_text('Generating audio… You can continue using Bol.')
+        def worker():
+            try:data=synthesize(text,key,language,voice,pace);error=None
+            except Exception as exc:data=None;error=str(exc)
+            GLib.idle_add(self.audio_generated,generation,data,error)
+        threading.Thread(target=worker,daemon=True).start()
+
+    def audio_generated(self,generation,data,error):
+        if not self.alive or generation!=self.audio_generation:return False
+        self.audio_generate.set_sensitive(True);self.audio_cancel.set_sensitive(False)
+        if error:self.audio_note.set_text(error);return False
+        import tempfile,os,io,wave
+        self.stop_audio()
+        if self.audio_directory is None:self.audio_directory=tempfile.TemporaryDirectory(prefix='bol-audio-')
+        self.audio_path=Path(self.audio_directory.name)/'generated.wav';self.audio_path.write_bytes(data);os.chmod(self.audio_path,0o600)
+        with wave.open(io.BytesIO(data),'rb') as clip:duration=clip.getnframes()/clip.getframerate()
+        self.audio_note.set_text(f'Audio ready · {duration:.1f} seconds · WAV, 24 kHz');self.audio_play.set_sensitive(True);self.audio_save.set_sensitive(True)
+        return False
+
+    def cancel_audio(self,*args):
+        self.audio_generation+=1;self.audio_generate.set_sensitive(True);self.audio_cancel.set_sensitive(False)
+        self.audio_note.set_text('Generation cancelled. A request already sent to Sarvam may still complete and use credits.')
+
+    def text_to_audio(self,text):
+        self.buffers['tts_text'].set_text(text)
+        self.select('Text to Audio')
+
+    def audio_from_latest(self,*args):
+        def worker():
+            try:result=self.core.request('result');text=result.get('text','')
+            except Exception:text=''
+            GLib.idle_add(self.set_audio_text,text)
+        threading.Thread(target=worker,daemon=True).start()
+
+    def set_audio_text(self,text):
+        if self.alive:
+            if text:self.buffers['tts_text'].set_text(text)
+            else:self.audio_note.set_text('No latest transcript is available yet.')
+        return False
+
+    def stop_audio(self):
+        if self.audio_player and self.audio_player.poll() is None:self.audio_player.terminate()
+        if self.audio_player:
+            try:self.audio_player.wait(timeout=1)
+            except Exception:self.audio_player.kill();self.audio_player.wait()
+        self.audio_player=None
+
+    def play_audio(self,*args):
+        if not self.audio_path:return
+        import subprocess,shutil
+        if not shutil.which('pw-play'):self.dialog('Playback unavailable','Install PipeWire tools to use audio playback.');return
+        self.stop_audio();self.audio_player=subprocess.Popen(['pw-play',str(self.audio_path)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+
+    def save_audio(self,*args):
+        if not self.audio_path or not self.audio_path.exists():return
+        # Capture this clip now, so generating a new one cannot change the export.
+        data=self.audio_path.read_bytes()
+        chooser=Gtk.FileChooserNative.new('Save generated audio',self.window,Gtk.FileChooserAction.SAVE,'Save','Cancel');chooser.set_current_name('bol-audio.wav')
+        file_filter=Gtk.FileFilter();file_filter.set_name('WAV audio');file_filter.add_pattern('*.wav');chooser.add_filter(file_filter)
+        def response(dialog,result):
+            if result==Gtk.ResponseType.ACCEPT:
+                path=dialog.get_file().get_path()
+                try:
+                    if not path:raise ValueError('Choose a local folder.')
+                    import os
+                    fd=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_TRUNC,0o600)
+                    with os.fdopen(fd,'wb') as output:output.write(data)
+                    self.audio_note.set_text('WAV file saved.')
+                except Exception as error:self.dialog('Could not save audio',str(error))
+            dialog.destroy()
+        chooser.connect('response',response);chooser.show()
 
     def build_general(self):
         page=self.pages['General'];group=self.section(page,'Speech recognition')
@@ -427,6 +569,7 @@ class Workspace:
         text=label(row['result'],'transcript-text',True);text.set_lines(5);text.set_ellipsize(3);text.set_max_width_chars(80);card.append(text)
         bottom=Gtk.Box(spacing=8)
         count=label(f'{len(row["result"].split())} words','transcript-meta');count.set_hexpand(True);bottom.append(count)
+        speak=action_button('To audio','audio');speak.add_css_class('quiet');speak.connect('clicked',lambda b:self.text_to_audio(row['result']));bottom.append(speak)
         details=Gtk.Button(label='View transcript');details.add_css_class('quiet');details.connect('clicked',lambda b:self.transcript_details(row));bottom.append(details)
         copy=action_button('Copy','copy');copy.add_css_class('quiet');copy.connect('clicked',lambda b:self.copy_history_row(row));bottom.append(copy)
         card.append(bottom);return card
@@ -711,6 +854,8 @@ class Workspace:
 
     def on_close(self,*args):
         self.alive=False
+        self.audio_generation+=1;self.stop_audio()
+        if self.audio_directory:self.audio_directory.cleanup()
         process=getattr(self,'mic_test_process',None)
         if process and process.poll() is None:process.terminate()
         return False

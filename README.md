@@ -5,6 +5,8 @@ An independent voice typing and writing app for **Hyprland / Wayland**. Inspired
 ## Features
 
 - Global dictation with toggle or hold-to-talk shortcuts.
+- Text to Audio: Sarvam Bulbul v3 generation with language, voice and speed selection, local playback and WAV export.
+- History-first navigation with colorful SVG icons, vivid section accents and stronger active controls on a black background.
 - Floating recording/processing indicator that does not take focus.
 - English and 22 Indic languages, automatic detection, mixed-script output, Roman transliteration, English translation and verbatim modes.
 - Optional AI polish: punctuation, filler removal, spoken corrections, paragraphs and lists.
@@ -52,6 +54,14 @@ Local Whisper's `.en` models are English-only. Select **English** or **Detect au
 With local speech, **AI writing with local speech** is **off by default**, even if Polish was previously enabled. This keeps ordinary local dictation offline. Enable it explicitly in Providers to use polish or voice editing with your chosen writing endpoint. This may send text off-device if that endpoint is remote. Local corrections, snippets, clipboard insertion and history continue to work without network access.
 
 The compatible APIs have been tested against a local protocol fixture; individual cloud providers may differ in supported models and options. There is no silent fallback from local to cloud.
+
+## Text to Audio
+
+Open **Text to Audio** from the sidebar. Type or paste text, choose a language, voice and speed, then click **Generate audio**. You can also use **Use latest transcript** or **To audio** on a History card. These shortcuts only fill the editor; generation always requires a click.
+
+This uses [Sarvam Bulbul v3](https://docs.sarvam.ai/api-reference/text-to-speech/convert) with the existing Sarvam API key from Providers. Text is sent to Sarvam and generation may use API credits, even if local Whisper is selected for dictation. Supports English, Hindi, Punjabi, Bengali, Tamil, Telugu, Kannada, Malayalam, Marathi, Gujarati and Odia, with up to 2500 characters per request. Speaking speed ranges from 0.5 to 2.0.
+
+After generation, click **Play**, **Stop**, or **Save WAV**. Playback uses `pw-play`. Generated audio is not played automatically. Temporary clips are private and removed when the settings window closes; use Save WAV to keep a copy. Cancelling generation discards a late result but cannot recall a request already sent to the API. This first integration uses stock voices, not voice cloning.
 
 ## Shortcuts
 
