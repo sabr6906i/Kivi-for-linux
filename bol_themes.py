@@ -27,6 +27,15 @@ window.bol, .bol headerbar, .bol .footer {{ background: {p['bg']}; color: {p['fg
 .bol .group, .bol .transcript, .bol .history-empty, .bol .profile-menu-panel {{ background: {p['panel']}; border-color: {p['border']}; }}
 .bol .transcript:hover {{ background: {p['field']}; border-color: {p['border']}; }}
 .bol entry, .bol passwordentry, .bol dropdown > button, .bol spinbutton, .bol .history-toolbar {{ background: {p['field']}; color: {p['fg']}; border-color: {p['border']}; }}
+.bol dropdown > button {{ background: transparent; border: 0; border-radius: 7px; padding: 6px 10px; min-height: 24px; box-shadow: none; }}
+.bol dropdown > button:hover, .bol dropdown > button:checked {{ background: {p['field']}; }}
+.bol dropdown > button:focus-visible {{ outline: 2px solid {'#396ed8' if is_light(theme) else '#82b8ff'}; outline-offset: 2px; }}
+.bol dropdown > button label {{ font-weight: 500; color: {p['fg']}; }}
+.bol dropdown > button arrow {{ color: {p['muted']}; min-width: 12px; min-height: 12px; margin-left: 16px; }}
+.bol dropdown popover contents {{ background: {p['panel']}; color: {p['fg']}; border: 1px solid {p['border']}; padding: 5px; border-radius: 12px; box-shadow: 0 6px 18px alpha(#000000, 0.14); }}
+.bol dropdown popover listview {{ background: transparent; color: {p['fg']}; }}
+.bol dropdown popover row {{ border-radius: 6px; padding: 7px 10px; }}
+.bol dropdown popover row:hover, .bol dropdown popover row:selected {{ background: {p['field']}; color: {p['fg']}; }}
 .bol textview, .bol textview text {{ background: {p['panel']}; color: {p['fg']}; }}
 .bol .page-title, .bol .row-title, .bol .transcript-text, .bol .profile-name {{ color: {p['fg']}; }}
 .bol .muted, .bol .row-hint, .bol .transcript-meta, .bol .profile-caption, .bol .menu-item-hint, .bol .nav-heading {{ color: {p['muted']}; }}

@@ -188,7 +188,7 @@ def light_color(color):
     hue,lum,sat=colorsys.rgb_to_hls(r,g,b)
     if sat<.15:
         return '#edf1f6' if lum<.15 else '#ced7e3' if lum<.45 else '#607087' if lum<.7 else '#1d2b40'
-    rgb=colorsys.hls_to_rgb(hue,.94 if lum<.35 else .34,min(sat,.8))
+    rgb=colorsys.hls_to_rgb(hue,.90 if lum<.35 else .39,min(1.0,sat*1.18))
     return '#'+''.join(f'{round(channel*255):02x}' for channel in rgb)
 
 
@@ -441,7 +441,7 @@ class Workspace:
         self.row(group,title,hint,widget);return widget
 
     def choice(self,group,key,title,hint,values,names):
-        widget=Gtk.DropDown.new_from_strings([names.get(v,v) for v in values]);widget.set_size_request(245,-1)
+        widget=Gtk.DropDown.new_from_strings([names.get(v,v) for v in values]);widget.set_size_request(190,-1)
         value=self.settings.get(key,values[0]);widget.set_selected(values.index(value) if value in values else 0)
         widget.connect('notify::selected',self.changed);self.widgets[key]=widget;self.choices[key]=values
         self.row(group,title,hint,widget)
@@ -465,9 +465,9 @@ class Workspace:
         self.audio_characters=label('0 / 2,500 characters','muted');page.append(self.audio_characters)
         self.buffers['tts_text'].connect('changed',lambda b:self.audio_characters.set_text(f'{len(self.text("tts_text")):,} / 2,500 characters'))
         group=self.section(page,'Voice settings')
-        self.audio_language=Gtk.DropDown.new_from_strings([LANGUAGE_NAMES.get(v,v) for v in TTS_LANGUAGES]);self.audio_language.set_size_request(245,-1)
+        self.audio_language=Gtk.DropDown.new_from_strings([LANGUAGE_NAMES.get(v,v) for v in TTS_LANGUAGES]);self.audio_language.set_size_request(190,-1)
         self.row(group,'Language','The language of the text you want spoken.',self.audio_language)
-        self.audio_voice=Gtk.DropDown.new_from_strings([v.capitalize() for v in TTS_VOICES]);self.audio_voice.set_size_request(245,-1)
+        self.audio_voice=Gtk.DropDown.new_from_strings([v.capitalize() for v in TTS_VOICES]);self.audio_voice.set_size_request(190,-1)
         self.row(group,'Voice','Choose the speaker used for generation.',self.audio_voice)
         self.audio_pace=Gtk.SpinButton.new_with_range(.5,2,.1);self.audio_pace.set_digits(1);self.audio_pace.set_value(1)
         self.row(group,'Speaking speed','1.0 is the natural speaking pace.',self.audio_pace)
@@ -475,7 +475,7 @@ class Workspace:
         self.row(group,'Expressiveness','Higher values add variation; they do not guarantee a specific emotion.',self.audio_expression)
         group=self.section(page,'Delivery style','Choose a preset or describe the feeling you want. Your script stays unchanged.')
         self.audio_styles=list(STYLE_PRESETS)
-        self.audio_style=Gtk.DropDown.new_from_strings(self.audio_styles);self.audio_style.set_size_request(245,-1)
+        self.audio_style=Gtk.DropDown.new_from_strings(self.audio_styles);self.audio_style.set_size_request(190,-1)
         self.audio_style.connect('notify::selected',self.apply_audio_preset)
         self.row(group,'Style preset','Applies a stock voice, pace and expressiveness.',self.audio_style)
         self.editor(group,'tts_instructions','',90)
