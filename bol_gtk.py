@@ -197,7 +197,18 @@ def theme_css(theme):
     css=CSS.decode()
     css=re.sub(r'#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b',lambda match:light_color(match[0]),css)
     css+='\n.bol button.primary, .bol button.primary label { color: white; }\n.bol button.primary:disabled, .bol button.primary:disabled label { color: #8793a4; }\n.bol .window-control { background: transparent; }\n'
-    return (css+overrides(theme)+light_accents(theme)).encode()
+    css+=overrides(theme)+light_accents(theme)
+    if theme=='ivory':
+        # Catch inherited GTK/base accents as well as our semantic colors.
+        def warm_accent(match):
+            color=match[0];rgb=[int(color[i:i+2],16)/255 for i in (1,3,5)]
+            hue,lum,sat=colorsys.rgb_to_hls(*rgb)
+            if .48<hue<.72 and sat>.12:
+                rgb=colorsys.hls_to_rgb(.10,lum,min(sat,.65))
+                return '#'+''.join(f'{round(c*255):02x}' for c in rgb)
+            return color
+        css=re.sub(r'#[0-9a-fA-F]{6}\b',warm_accent,css)
+    return css.encode()
 
 
 @lru_cache(maxsize=384)
@@ -466,7 +477,7 @@ class Workspace:
         self.audio_characters=label('0 / 2,500 characters','muted');page.append(self.audio_characters)
         self.buffers['tts_text'].connect('changed',lambda b:self.audio_characters.set_text(f'{len(self.text("tts_text")):,} / 2,500 characters'))
         group=self.section(page,'Voice settings')
-        self.audio_language=Gtk.DropDown.new_from_strings([LANGUAGE_NAMES.get(v,v) for v in TTS_LANGUAGES]);self.audio_language.set_size_request(190,-1)
+        self.audio_language=Gtk.DropDown.new_from_strings([LANGUAGE_NAMES.get(v.split('-')[0],v) for v in TTS_LANGUAGES]);self.audio_language.set_size_request(190,-1)
         self.row(group,'Language','The language of the text you want spoken.',self.audio_language)
         self.audio_voice=Gtk.DropDown.new_from_strings([v.capitalize() for v in TTS_VOICES]);self.audio_voice.set_size_request(190,-1)
         self.row(group,'Voice','Choose the speaker used for generation.',self.audio_voice)

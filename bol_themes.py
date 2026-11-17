@@ -61,7 +61,7 @@ window.bol, .bol headerbar, .bol .footer {{ background: {p['bg']}; color: {p['fg
 LIGHT_ACCENTS = {
     'paper': ['#2458ce','#793bc1','#956000','#08774f','#b32a79','#007b8c','#6144c5','#ba470c','#08774f'],
     'light': ['#285bb8','#7042b5','#8e6522','#13766d','#a53683','#256f9d','#5356b4','#a94668','#286c87'],
-    'ivory': ['#93601f','#804269','#91611c','#507035','#a03d50','#32736d','#76518e','#a44d26','#657035'],
+    'ivory': ['#93601f','#804269','#91611c','#507035','#a03d50','#7c6331','#76518e','#a44d26','#657035'],
     'sage': ['#24705d','#63518d','#847023','#217448','#974d72','#167578','#4e608b','#a45634','#287247'],
 }
 ACCENT_ROLES = ['general','providers','writing','vocabulary','snippets','history','shortcuts','text-to-audio','profile']
