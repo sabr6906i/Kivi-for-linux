@@ -27,6 +27,14 @@ window.bol, .bol headerbar, .bol .footer {{ background: {p['bg']}; color: {p['fg
 .bol .group, .bol .transcript, .bol .history-empty, .bol .profile-menu-panel {{ background: {p['panel']}; border-color: {p['border']}; }}
 .bol .transcript:hover {{ background: {p['field']}; border-color: {p['border']}; }}
 .bol entry, .bol passwordentry, .bol dropdown > button, .bol spinbutton, .bol .history-toolbar {{ background: {p['field']}; color: {p['fg']}; border-color: {p['border']}; }}
+/* Keep GTK's value and step buttons inside one continuous surface. */
+.bol spinbutton {{ padding: 0; min-height: 34px; border-radius: 8px; }}
+.bol spinbutton > text, .bol spinbutton > entry {{ background: transparent; color: {p['fg']}; border: 0; border-radius: 0; box-shadow: none; padding: 0 10px; min-width: 42px; min-height: 34px; }}
+.bol spinbutton > button {{ background: transparent; color: {p['fg']}; border: 0; border-left: 1px solid {p['border']}; border-radius: 0; padding: 0; margin: 0; min-width: 34px; min-height: 34px; box-shadow: none; }}
+.bol spinbutton > button:last-child {{ border-radius: 0 7px 7px 0; }}
+.bol spinbutton > button:hover {{ background: {p['border']}; }}
+.bol spinbutton > button:disabled {{ color: {p['muted']}; opacity: 0.45; }}
+.bol spinbutton:focus-within {{ outline: 2px solid {'#396ed8' if is_light(theme) else '#82b8ff'}; outline-offset: 2px; }}
 .bol dropdown > button {{ background: transparent; border: 0; border-radius: 7px; padding: 6px 10px; min-height: 24px; box-shadow: none; }}
 .bol dropdown > button:hover, .bol dropdown > button:checked {{ background: {p['field']}; }}
 .bol dropdown > button:focus-visible {{ outline: 2px solid {'#396ed8' if is_light(theme) else '#82b8ff'}; outline-offset: 2px; }}
