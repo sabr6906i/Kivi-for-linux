@@ -197,12 +197,13 @@ def theme_css(theme):
     css=CSS.decode()
     css=re.sub(r'#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b',lambda match:light_color(match[0]),css)
     css+='\n.bol button.primary, .bol button.primary label { color: white; }\n.bol button.primary:disabled, .bol button.primary:disabled label { color: #8793a4; }\n.bol .window-control { background: transparent; }\n'
-    return (css+overrides(theme)+light_accents()).encode()
+    return (css+overrides(theme)+light_accents(theme)).encode()
 
 
 @lru_cache(maxsize=384)
 def cached_icon(name,size,theme):
-    path=ICON_DIR/(name+'-light.svg') if is_light(theme) else ICON_DIR/(name+'.svg')
+    path=ICON_DIR/(name+'-'+theme+'.svg') if is_light(theme) else ICON_DIR/(name+'.svg')
+    if is_light(theme) and not path.exists():path=ICON_DIR/(name+'-light.svg')
     if not path.exists():path=ICON_DIR/(name+'.svg')
     return Gtk.IconPaintable.new_for_file(Gio.File.new_for_path(str(path)),size,1)
 

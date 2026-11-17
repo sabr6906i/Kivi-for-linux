@@ -57,43 +57,58 @@ window.bol, .bol headerbar, .bol .footer {{ background: {p['bg']}; color: {p['fg
 '''
 
 
-def light_accents():
-    """Shared semantic colors keep every light palette equally expressive."""
-    accents = {
-        'general': ('#165dcc', '#e3edff'),
-        'providers': ('#783bce', '#eee3ff'),
-        'writing': ('#986000', '#fff0cc'),
-        'vocabulary': ('#087747', '#d6f5e7'),
-        'snippets': ('#b42a7c', '#ffe0f0'),
-        'history': ('#007b88', '#d5f4f7'),
-        'shortcuts': ('#6045c7', '#eae3ff'),
-        'text-to-audio': ('#b64b0a', '#ffe6d4'),
-        'profile': ('#087747', '#d6f5e7'),
-    }
-    css = ''
-    for name, (ink, tint) in accents.items():
-        css += f'''
+# Semantic colors vary with the surface temperature of each light theme.
+LIGHT_ACCENTS = {
+    'paper': ['#2458ce','#793bc1','#956000','#08774f','#b32a79','#007b8c','#6144c5','#ba470c','#08774f'],
+    'light': ['#285bb8','#7042b5','#8e6522','#13766d','#a53683','#256f9d','#5356b4','#a94668','#286c87'],
+    'ivory': ['#93601f','#804269','#91611c','#507035','#a03d50','#32736d','#76518e','#a44d26','#657035'],
+    'sage': ['#24705d','#63518d','#847023','#217448','#974d72','#167578','#4e608b','#a45634','#287247'],
+}
+ACCENT_ROLES = ['general','providers','writing','vocabulary','snippets','history','shortcuts','text-to-audio','profile']
+
+
+def accent_colors(theme):
+    return dict(zip(ACCENT_ROLES, LIGHT_ACCENTS.get(theme, LIGHT_ACCENTS['paper'])))
+
+
+def tint(color):
+    return '#'+''.join(f'{round(int(color[i:i+2],16)*.14+255*.86):02x}' for i in (1,3,5))
+
+
+def light_accents(theme):
+    colors=accent_colors(theme)
+    css=''
+    for name, ink in colors.items():
+        wash=tint(ink)
+        css+=f'''
 .bol .page-{name} .section-title {{ color: {ink}; }}
-.bol .nav-button.nav-{name}.selected {{ background: {tint}; background-image: none; color: {ink}; }}
+.bol .nav-button.nav-{name}.selected {{ background: {wash}; background-image: none; color: {ink}; }}
 .bol .nav-button.nav-{name}.selected label {{ color: {ink}; }}
-.bol .profile-menu .well-{name} {{ background: {tint}; }}
+.bol .profile-menu .well-{name} {{ background: {wash}; }}
 '''
-    return css + '''
-.bol button.primary { background: linear-gradient(to bottom, #287af0, #165dcc); color: white; }
-.bol button.primary:hover { background: #165dcc; }
-.bol button.primary:disabled { background: #e2e7ee; background-image: none; color: #647080; box-shadow: none; }
-.bol .profile-avatar { background: #d6f5e7; color: #087747; }
-.bol .brand { color: #087747; }
-.bol .filter:checked { background: #e3edff; background-image: none; color: #165dcc; }
-.bol button.filter:checked label { color: #165dcc; }
-.bol .tag-dictation, .bol .saving-on, .bol .copy-action { background: #d6f5e7; color: #087747; }
-.bol .tag-edit { background: #eee3ff; color: #783bce; }
-.bol .tag-unsaved, .bol .saving-off, .bol .memory-action { background: #fff0cc; color: #986000; }
-.bol .export-action { background: #d5f4f7; color: #007b88; }
-.bol .copy-action:hover { background: #bcebd6; }
-.bol .export-action:hover { background: #bae9ef; }
-.bol .memory-action:hover { background: #ffe4a0; }
-.bol .date-heading { color: #007b88; }
-.bol .status { color: #165dcc; }
-.bol .key { background: #eae3ff; color: #6045c7; }
+    primary=colors['general'];profile=colors['profile']
+    css+=f'''
+.bol button.primary {{ background: linear-gradient(to bottom, {primary}, shade({primary}, 0.86)); color: white; }}
+.bol button.primary:hover {{ background: shade({primary}, 0.90); }}
+.bol button.primary:disabled {{ background: #e2e7ee; background-image: none; color: #647080; box-shadow: none; }}
+.bol .profile-avatar {{ background: {tint(profile)}; color: {profile}; }}
+.bol .brand {{ color: {profile}; }}
+.bol .profile-menu .menu-setup {{ color: {profile}; }}
+.bol .profile-menu .menu-setup:hover {{ background: {tint(profile)}; }}
+.bol .editor-frame {{ border-color: {palette(theme)['border']}; }}
+.bol .filter:checked {{ background: {tint(primary)}; background-image: none; color: {primary}; }}
+.bol button.filter:checked label {{ color: {primary}; }}
+.bol .status {{ color: {primary}; }}
+.bol .date-heading {{ color: {colors['history']}; }}
+.bol switch:checked {{ background: {primary}; }}
+.bol switch:checked slider {{ background: white; }}
+.bol .theme-preview.selected {{ box-shadow: inset 0 0 0 2px {primary}; }}
+.bol entry:focus-within, .bol passwordentry:focus-within, .bol .editor-frame:focus-within {{ border-color: {primary}; }}
+.bol dropdown > button:focus-visible, .bol spinbutton:focus-within {{ outline-color: {primary}; }}
 '''
+    for selectors, role in [('.tag-dictation, .bol .saving-on, .bol .copy-action','vocabulary'),('.tag-edit','providers'),('.tag-unsaved, .bol .saving-off, .bol .memory-action','writing'),('.export-action','history'),('.key','shortcuts')]:
+        ink=colors[role]
+        css+=f'.bol {selectors} {{ background: {tint(ink)}; color: {ink}; }}\n'
+    for name,role in [('copy','vocabulary'),('export','history'),('memory','writing')]:
+        css+=f'.bol .{name}-action:hover {{ background: shade({tint(colors[role])}, 0.95); }}\n'
+    return css
