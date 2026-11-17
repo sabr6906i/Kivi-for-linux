@@ -119,6 +119,28 @@ window.bol  { background: #090909; color: #ececec; font-family: 'Noto Sans', san
 .bol .profile-avatar { background: #183827; color: #8cf3c2; border-radius: 9px; padding: 10px; font-weight: 700; }
 .bol .nav-button.nav-profile.selected { background: #19352a; color: #8cf3c2; border: 0; }
 .bol .page-profile .section-title { color: #8cf3c2; }
+.bol .profile-card > button { background: linear-gradient(to bottom, #191d1d, #131616); border: 0; border-radius: 13px; padding: 0; box-shadow: none; }
+.bol .profile-card > button:hover { background: linear-gradient(to bottom, #252d2b, #1a211f); }
+.bol .profile-card > button:checked { background: #202b27; }
+.bol .profile-avatar { background: linear-gradient(145deg, #24664a, #123c2e); color: #a7ffd1; border: 0; border-radius: 11px; padding: 0; font-size: 14px; font-weight: 700; }
+.bol .profile-name { color: #f2f4f3; font-size: 13px; font-weight: 600; }
+.bol .profile-caption { color: #8f9a95; font-size: 11px; font-weight: 400; }
+.bol .profile-menu contents { background: #141717; border: 0; border-radius: 15px; padding: 3px; box-shadow: 0 12px 35px alpha(black, 0.55); }
+.bol .profile-menu .menu-group { color: #77847e; font-size: 10px; font-weight: 600; }
+.bol .profile-menu .nav-button.settings-item { background: transparent; background-image: none; border: 0; padding: 9px 10px; border-radius: 9px; box-shadow: none; }
+.bol .profile-menu .nav-button.settings-item:hover { background: #232a27; }
+.bol .profile-menu .nav-button.settings-item.selected { background: #26332d; background-image: none; border: 0; box-shadow: none; }
+.bol .profile-menu .nav-button.settings-item .menu-item-title { color: #e5ece8; font-size: 12px; font-weight: 500; }
+.bol .profile-menu .menu-item-hint { color: #89958e; font-size: 10px; font-weight: 400; }
+.bol .profile-menu .menu-icon { padding: 7px; border-radius: 8px; background: #232c27; }
+.bol .profile-menu .well-general { background: #172b42; }
+.bol .profile-menu .well-providers { background: #2b2040; }
+.bol .profile-menu .well-writing { background: #362b17; }
+.bol .profile-menu .well-vocabulary { background: #17342a; }
+.bol .profile-menu .well-snippets { background: #362035; }
+.bol .profile-menu .well-shortcuts { background: #282540; }
+.bol .profile-menu .menu-setup { background: transparent; border: 0; padding: 14px 17px; border-radius: 9px; margin: 4px; color: #a3d9be; }
+.bol .profile-menu .menu-setup:hover { background: #222c26; }
 .bol scrollbar slider  { background: #515151; min-width: 5px; border-radius: 4px; }
 '''
 
@@ -221,17 +243,45 @@ class Workspace:
         brand.append(icon);brand.append(label('Bol','brand'));side.append(brand)
         navtitle=label('Workspace','nav-heading');navtitle.set_margin_start(22);navtitle.set_margin_top(9);navtitle.set_margin_bottom(8);side.append(navtitle)
         self.nav={}
-        profile_popover=Gtk.Popover();profile_menu=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=3);margins(profile_menu,8);profile_popover.set_child(profile_menu)
+        profile_popover=Gtk.Popover();profile_popover.add_css_class('profile-menu');profile_popover.set_has_arrow(False);profile_popover.set_position(Gtk.PositionType.TOP);profile_popover.set_offset(0,-8)
+        profile_menu=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=0);profile_menu.set_size_request(296,-1);profile_popover.set_child(profile_menu)
         self.profile_popover=profile_popover
-        profile_menu.append(label('Workspace settings','nav-heading'))
+        menu_identity=Gtk.Box(spacing=12);margins(menu_identity,15)
+        self.profile_menu_avatar=label('B','profile-avatar');self.profile_menu_avatar.set_xalign(.5);self.profile_menu_avatar.set_size_request(40,40);menu_identity.append(self.profile_menu_avatar)
+        menu_identity_text=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=4);menu_identity_text.set_hexpand(True)
+        self.profile_menu_name=label('Your workspace','profile-name');self.profile_menu_name.set_ellipsize(3);self.profile_menu_name.set_max_width_chars(24);menu_identity_text.append(self.profile_menu_name)
+        menu_identity_text.append(label('Local profile · on this device','profile-caption'));menu_identity.append(menu_identity_text);profile_menu.append(menu_identity)
+        profile_menu.append(Gtk.Separator())
         for title,icon_name,description in PAGES:
             button=Gtk.Button();button.add_css_class('nav-button');button.add_css_class('nav-'+title.lower().replace(' ','-'));button.set_margin_start(10);button.set_margin_end(10)
             row=Gtk.Box(spacing=12);image=svg_icon(icon_name,18)
             row.append(image);row.append(label('Connections' if title=='Providers' else title));button.set_child(row)
             button.connect('clicked',lambda b,name=title:self.select(name))
             if title in ['History','Text to Audio']:side.append(button)
-            else:profile_menu.append(button)
             self.nav[title]=button
+        descriptions={
+            'Profile':('Your profile','Name and workspace preferences','profile'),
+            'General':('Preferences','Language, recording, and privacy','general'),
+            'Providers':('Connections','Speech and writing services','providers'),
+            'Writing':('Writing style','Tone and app-specific rules','writing'),
+            'Vocabulary':('Vocabulary','Names and preferred spellings','vocabulary'),
+            'Snippets':('Snippets','Reusable spoken shortcuts','snippets'),
+            'Shortcuts':('Keyboard shortcuts','Dictation and editing controls','shortcuts'),
+        }
+        menu_scroll=Gtk.ScrolledWindow();menu_scroll.set_policy(Gtk.PolicyType.NEVER,Gtk.PolicyType.AUTOMATIC);menu_scroll.set_propagate_natural_height(True);menu_scroll.set_max_content_height(460)
+        menu_items=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=2);margins(menu_items,7);menu_scroll.set_child(menu_items);profile_menu.append(menu_scroll)
+        for group,items in [('Workspace',['Profile','General','Providers']),('Personalization',['Writing','Vocabulary','Snippets']),('Controls',['Shortcuts'])]:
+            group_title=label(group,'menu-group');group_title.set_margin_start(10);group_title.set_margin_top(10);group_title.set_margin_bottom(5);menu_items.append(group_title)
+            for key in items:
+                title,hint,icon_name=descriptions[key]
+                button=self.nav[key];button.add_css_class('settings-item');button.set_margin_start(0);button.set_margin_end(0)
+                row=Gtk.Box(spacing=11)
+                image=svg_icon(icon_name,17);image.add_css_class('menu-icon');image.add_css_class('well-'+icon_name);row.append(image)
+                words=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=3);words.set_hexpand(True);words.append(label(title,'menu-item-title'));words.append(label(hint,'menu-item-hint'));row.append(words)
+                button.set_child(row);menu_items.append(button)
+        profile_menu.append(Gtk.Separator())
+        setup=Gtk.Button();setup.add_css_class('menu-setup');setup_row=Gtk.Box(spacing=10);setup_row.append(svg_icon('brand',16));setup_row.append(label('Setup assistant'));setup.set_child(setup_row)
+        setup.connect('clicked',lambda b:(self.profile_popover.popdown(),self.show_setup()));profile_menu.append(setup)
         spacer=Gtk.Box();spacer.set_vexpand(True);side.append(spacer)
         quick=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=10);margins(quick,22)
         quick.append(label('Quick access','nav-heading'));self.key_labels={}
@@ -239,12 +289,13 @@ class Workspace:
             row=Gtk.Box();name=label(title,'muted');name.set_hexpand(True);row.append(name)
             value=label(self.settings.get(key,''),'key');row.append(value);self.key_labels[key]=value;quick.append(row)
         side.append(quick)
-        profile_button=Gtk.MenuButton();profile_button.set_popover(profile_popover);profile_button.set_margin_start(12);profile_button.set_margin_end(12);profile_button.set_margin_top(14);profile_button.set_margin_bottom(18)
-        identity=Gtk.Box(spacing=10);margins(identity,6)
-        self.profile_avatar=label('B','profile-avatar');identity.append(self.profile_avatar)
-        identity_text=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=3);identity_text.set_hexpand(True)
-        self.profile_title=label(self.settings.get('profile_name') or 'Your workspace','section-title');self.profile_title.set_ellipsize(3);self.profile_title.set_max_width_chars(20);identity_text.append(self.profile_title);identity_text.append(label('Profile & settings','muted'));identity.append(identity_text)
-        identity.append(svg_icon('profile',17));profile_button.set_child(identity);side.append(profile_button)
+        profile_button=Gtk.MenuButton();self.profile_button=profile_button;profile_button.add_css_class('profile-card');profile_button.set_popover(profile_popover);profile_button.set_margin_start(12);profile_button.set_margin_end(12);profile_button.set_margin_top(14);profile_button.set_margin_bottom(18)
+        identity=Gtk.Box(spacing=11);margins(identity,10)
+        self.profile_avatar=label('B','profile-avatar');self.profile_avatar.set_xalign(.5);self.profile_avatar.set_size_request(36,36);identity.append(self.profile_avatar)
+        identity_text=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=4);identity_text.set_hexpand(True)
+        self.profile_title=label(self.settings.get('profile_name') or 'Your workspace','profile-name');self.profile_title.set_ellipsize(3);self.profile_title.set_max_width_chars(16);identity_text.append(self.profile_title)
+        identity_text.append(label('Profile & settings','profile-caption'));identity.append(identity_text)
+        identity.append(svg_icon('chevrons',14));profile_button.set_child(identity);side.append(profile_button)
         main=Gtk.Box(orientation=Gtk.Orientation.VERTICAL);main.set_hexpand(True);layout.append(main)
         self.stack=Gtk.Stack();self.stack.set_vexpand(True);self.stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE);self.stack.set_transition_duration(120);main.append(self.stack)
         self.pages={}
@@ -477,7 +528,8 @@ class Workspace:
     def update_profile_identity(self):
         name=(self.settings.get('profile_name') or 'Your workspace').strip()
         self.profile_title.set_text(name)
-        self.profile_avatar.set_text(''.join(part[0] for part in name.split()[:2]).upper() or 'B')
+        initials=''.join(part[0] for part in name.split()[:2]).upper() or 'B'
+        self.profile_avatar.set_text(initials);self.profile_menu_avatar.set_text(initials);self.profile_menu_name.set_text(name)
 
     def build_profile(self):
         page=self.pages['Profile']
