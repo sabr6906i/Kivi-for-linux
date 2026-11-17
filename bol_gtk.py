@@ -12,6 +12,7 @@ from gi.repository import Gtk, Gdk, GLib, Gio
 from bol_features import LANGUAGES, MODES, History, audio_level, history_date, filter_history
 from bol_providers import SPEECH_PROVIDERS, WRITING_PROVIDERS, detect_whisper, validate_speech
 from bol_audio import synthesize, suggest_delivery, STYLE_PRESETS, TTS_LANGUAGES, TTS_VOICES
+from bol_themes import THEMES, is_light, overrides
 from bol_ui import parse_pairs, format_pairs, apply_shortcuts
 
 CSS = b'''
@@ -192,16 +193,16 @@ def light_color(color):
 
 
 def theme_css(theme):
-    if theme!='light':return CSS
+    if not is_light(theme):return CSS+overrides(theme).encode()
     css=CSS.decode()
     css=re.sub(r'#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b',lambda match:light_color(match[0]),css)
     css+='\n.bol button.primary, .bol button.primary label { color: white; }\n.bol button.primary:disabled, .bol button.primary:disabled label { color: #8793a4; }\n.bol .window-control { background: transparent; }\n'
-    return css.encode()
+    return (css+overrides(theme)).encode()
 
 
-@lru_cache(maxsize=96)
+@lru_cache(maxsize=384)
 def cached_icon(name,size,theme):
-    path=ICON_DIR/(name+'-light.svg') if theme=='light' else ICON_DIR/(name+'.svg')
+    path=ICON_DIR/(name+'-light.svg') if is_light(theme) else ICON_DIR/(name+'.svg')
     if not path.exists():path=ICON_DIR/(name+'.svg')
     return Gtk.IconPaintable.new_for_file(Gio.File.new_for_path(str(path)),size,1)
 
@@ -628,6 +629,10 @@ class Workspace:
         self.theme_provider.load_from_data(theme_css(ICON_THEME))
         for image,(name,size) in list(ICON_IMAGES.items()):image.set_from_paintable(icon_paintable(name,size))
         if hasattr(self,'history_search'):self.history_search.set_icon_from_paintable(Gtk.EntryIconPosition.PRIMARY,icon_paintable('search',16))
+        if hasattr(self,'theme_description'):self.theme_description.set_text(THEMES[ICON_THEME]['description'])
+        for key,button in getattr(self,'theme_buttons',{}).items():
+            if key==ICON_THEME:button.add_css_class('selected')
+            else:button.remove_css_class('selected')
 
     def update_profile_identity(self):
         name=(self.settings.get('profile_name') or 'Your workspace').strip()
@@ -640,9 +645,26 @@ class Workspace:
         group=self.section(page,'Your profile','This profile lives on this computer. It is not a cloud account or a Sarvam sign-in.')
         self.entry(group,'profile_name','Display name','How Bol labels your workspace.').set_placeholder_text('Your name')
         self.widgets['profile_name'].set_max_length(80)
-        group=self.section(page,'Workspace preferences')
-        self.choice(group,'theme','Appearance','Preview the black or white version of Bol.',['dark','light'],{'dark':'Black','light':'White'})
+        group=self.section(page,'Appearance','Choose a palette to preview it immediately. Save changes to keep it.')
+        self.choice(group,'theme','Theme','Four light and four dark variations.',list(THEMES),{key:value['name'] for key,value in THEMES.items()})
+        self.theme_description=label(THEMES.get(self.settings.get('theme'),THEMES['dark'])['description'],'muted',True);margins(self.theme_description,14);group.append(self.theme_description)
+        self.theme_buttons={}
+        for family,title in [('dark','Dark palettes'),('light','Light palettes')]:
+            title_label=label(title,'muted');title_label.set_margin_start(14);title_label.set_margin_top(10);group.append(title_label)
+            gallery=Gtk.FlowBox();gallery.set_selection_mode(Gtk.SelectionMode.NONE);gallery.set_homogeneous(True);gallery.set_min_children_per_line(1);gallery.set_max_children_per_line(2);gallery.set_column_spacing(8);gallery.set_row_spacing(8);margins(gallery,10)
+            for key,value in THEMES.items():
+                if value['family']!=family:continue
+                button=Gtk.Button();button.add_css_class('theme-preview')
+                content=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=8)
+                picture=Gtk.Picture.new_for_filename(str(Path(__file__).resolve().parent/'themes'/(key+'.svg')));picture.set_can_shrink(True);picture.set_size_request(170,88)
+                content.append(picture);content.append(label(value['name']));button.set_child(content);button.set_tooltip_text(value['description'])
+                button.connect('clicked',lambda b,theme=key:self.widgets['theme'].set_selected(self.choices['theme'].index(theme)))
+                gallery.insert(button,-1);self.theme_buttons[key]=button
+            group.append(gallery)
         self.widgets['theme'].connect('notify::selected',self.preview_theme)
+        current=self.settings.get('theme','dark')
+        if current in self.theme_buttons:self.theme_buttons[current].add_css_class('selected')
+        group=self.section(page,'Workspace preferences')
         self.choice(group,'start_page','Open Bol to','Choose your default workspace.',['History','Text to Audio'],{})
         self.toggle(group,'show_advanced','Expand advanced connections','Show provider URLs, keys, and model paths when opening Connections.')
         group=self.section(page,'Setup')

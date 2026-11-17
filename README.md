@@ -44,7 +44,7 @@ The app requires Hyprland 0.55+ with the Lua configuration API. Other compositor
 
 The main sidebar contains **History** and **Text to Audio**. Click the **Profile & settings** button at the bottom to open Profile, General, Connections, Writing, Vocabulary, Snippets or Shortcuts. Technical provider details are collapsed under **Connections → Advanced provider settings**.
 
-**Profile** contains a saved Black/White appearance choice with live preview, a local display name, the default opening page, and whether advanced connection fields should be expanded. This is an on-device profile, not a cloud account or a Sarvam login. It does not sync or isolate multiple users' data.
+**Profile** contains eight saved appearance choices with live preview: Midnight, Graphite, Deep Ocean, and Cinder (dark); Paper, Porcelain, Ivory, and Sage (light). Open **Profile & settings → Your profile → Appearance** to compare palette previews and save your choice. Profile also contains a local display name, the default opening page, and whether advanced connection fields should be expanded. This is an on-device profile, not a cloud account or a Sarvam login. It does not sync or isolate multiple users' data.
 
 For a first installation without configured speech access, Bol opens a setup assistant. You can also open it later from **Profile → Open setup assistant** or **Connections → Open setup assistant**.
 
@@ -83,7 +83,7 @@ The default speech model is `scribe_v2`, configurable under Advanced provider se
 
 ## Window controls
 
-The title bar has **Minimize**, **Hide**, and **Close** controls. Their icons are white in Black appearance and dark ink in White appearance for contrast. Hide keeps the window and unsaved state in memory; reopening Bol from its launcher restores the same window. Hyprland does not implement conventional minimization, so Minimize uses Hide there. Close closes settings and stops its preview playback, while the separate dictation daemon remains available.
+The title bar has **Minimize**, **Hide**, and **Close** controls. Their icons are white in dark palettes and dark ink in light palettes for contrast. Hide keeps the window and unsaved state in memory; reopening Bol from its launcher restores the same window. Hyprland does not implement conventional minimization, so Minimize uses Hide there. Close closes settings and stops its preview playback, while the separate dictation daemon remains available.
 
 The settings menu is rendered inside the app overlay rather than as an unconstrained desktop popup, and uses a slim overlay scrollbar when needed.
 
