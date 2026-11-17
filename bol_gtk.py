@@ -477,7 +477,7 @@ class Workspace:
         self.audio_characters=label('0 / 2,500 characters','muted');page.append(self.audio_characters)
         self.buffers['tts_text'].connect('changed',lambda b:self.audio_characters.set_text(f'{len(self.text("tts_text")):,} / 2,500 characters'))
         group=self.section(page,'Voice settings')
-        self.audio_language=Gtk.DropDown.new_from_strings([LANGUAGE_NAMES.get(v.split('-')[0],v) for v in TTS_LANGUAGES]);self.audio_language.set_size_request(190,-1)
+        self.audio_language=Gtk.DropDown.new_from_strings([LANGUAGE_NAMES.get(v,LANGUAGE_NAMES.get(v.split('-')[0],v)) for v in TTS_LANGUAGES]);self.audio_language.set_size_request(190,-1)
         self.row(group,'Language','The language of the text you want spoken.',self.audio_language)
         self.audio_voice=Gtk.DropDown.new_from_strings([v.capitalize() for v in TTS_VOICES]);self.audio_voice.set_size_request(190,-1)
         self.row(group,'Voice','Choose the speaker used for generation.',self.audio_voice)
