@@ -36,13 +36,26 @@ cd Kivi-for-linux
 ~/.local/bin/bol settings
 ```
 
-For Sarvam, enter your API key from [Sarvam's dashboard](https://dashboard.sarvam.ai/) in **Providers**. Save settings. Writing features use the same key and require access to the `sarvam-105b` chat model. They consume additional API credits. Enable **Polish dictation** in Writing if desired; raw dictation remains the default.
+For Sarvam, enter your API key from [Sarvam's dashboard](https://dashboard.sarvam.ai/) in **Profile & settings → Connections**. Save settings. Writing features use the same key and require access to the `sarvam-105b` chat model. They consume additional API credits. Enable **Polish dictation** in Writing if desired; raw dictation remains the default.
 
 The app requires Hyprland 0.55+ with the Lua configuration API. Other compositors are not currently supported. `ffmpeg` is needed for recordings longer than 25 seconds; these are split into 24-second requests and combined before writing/pasting. This is not live streaming and may have small boundary recognition errors.
 
+## Profile and guided setup
+
+The main sidebar contains **History** and **Text to Audio**. Click the **Profile & settings** button at the bottom to open Profile, General, Connections, Writing, Vocabulary, Snippets or Shortcuts. Technical provider details are collapsed under **Connections → Advanced provider settings**.
+
+**Profile** contains a local display name, the default opening page, and whether advanced connection fields should be expanded. This is an on-device profile, not a cloud account or a Sarvam login. It does not sync or isolate multiple users' data.
+
+For a first installation without configured speech access, Bol opens a setup assistant. You can also open it later from **Profile → Open setup assistant** or **Connections → Open setup assistant**.
+
+- **Sarvam cloud:** the assistant opens Sarvam's key-management page in your default browser. Sign in there, create/copy a connection key once, then paste it into Bol (or click Paste copied key). Bol saves the key privately. The assistant does not read browser cookies, scrape keys, or automatically create credentials. Saving a key is not a live API-authentication test.
+- **Local Whisper:** the assistant detects your existing installation and model and validates their paths. No browser account or API key is required for local dictation. An English-only model requires English/auto language selection.
+
+Sarvam's [public authentication documentation](https://docs.sarvam.ai/api-reference/authentication) requires manually generated subscription keys; it does not document delegated consumer OAuth for this use case. A browser session alone cannot authorize Bol API calls. Fully keyless Bol sign-in would require a separately hosted Bol account/backend or an official provider authorization flow; neither is implemented here.
+
 ## Speech and writing providers
 
-Select the speech engine in **General**. Open **Providers** to configure credentials, local paths, and the writing engine. Speech and writing providers are independent, and their API keys are stored separately in your private settings file.
+Select the speech engine in **General**. Open **Profile & settings → Connections** to configure credentials, local paths, and the writing engine. Speech and writing providers are independent, and their API keys are stored separately in your private settings file.
 
 - **Sarvam:** existing default. Your saved key and preferences are preserved. Enter the Sarvam key in Providers.
 - **Local whisper.cpp:** choose your `whisper-cli` executable and GGML model, or use **Detect installed Whisper**. The app detects an existing `~/.local/share/whisper-dictation` setup or `whisper-cli` on PATH. It runs the whole recording locally and stops inference on cancellation. No model is downloaded automatically.
@@ -91,7 +104,7 @@ Keep the original text box focused and leave the selection unchanged. If the app
 
 Settings use a native GTK 4 workspace with neutral dark surfaces, a sidebar, grouped controls, and a consistent set of bundled SVG line icons. If GTK bindings are unavailable, Bol falls back to its Tk settings window. The recording indicator uses Tk.
 
-Open **Bol Voice Typing** from your app launcher, or run `~/.local/bin/bol settings`. Use **General → Test microphone** for a local three-second level check; it does not use API credits.
+Open **Bol Voice Typing** from your app launcher, or run `~/.local/bin/bol settings`. Settings are now inside the profile menu at the bottom of the sidebar. Use **General → Test microphone** for a local three-second level check; it does not use API credits.
 
 - **General:** speech engine, language, output mode, microphone node name (blank uses the PipeWire default), recording limit, paste, and local-history preference.
 - **Providers:** Sarvam key, local Whisper paths, compatible API endpoints and separate keys, and the local-speech writing opt-in.

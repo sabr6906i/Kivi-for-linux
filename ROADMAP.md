@@ -51,3 +51,16 @@ Done when source text, code identifiers and multilingual text survive the tested
 - Provider contract tests, HTTP failure tests and a reproducible audio quality/latency benchmark.
 
 Release readiness requires evidence from real use in the supported app/desktop matrix, not only mocked tests. Cross-desktop support, streaming recognition and automatic updates are not implemented yet.
+
+## Account experience beyond local profiles
+
+Implemented: local display name/startup preferences, a profile settings menu, first-run setup, and browser-guided Sarvam key connection. This is not cloud authentication.
+
+A real keyless account experience needs a separate project:
+
+- Choose and configure a Bol-owned identity provider with external-browser OAuth/PKCE and secure session storage.
+- Host an authenticated service that can authorize and meter cloud speech/writing/audio generation without distributing a shared provider key in the desktop app.
+- Define account quotas, cost ownership, logout/revocation, and optional preference synchronization.
+- Keep local dictation available without an account and make cloud processing an explicit choice.
+
+Provider dashboard cookies or website sign-in pages are not a replacement for a supported API authorization flow. No backend or billing service has been deployed for Bol.

@@ -116,6 +116,9 @@ window.bol  { background: #090909; color: #ececec; font-family: 'Noto Sans', san
 .bol .date-heading  { color: #7edce5; }
 .bol .nav-button.nav-text-to-audio.selected  { border: 0; background: linear-gradient(to bottom, #422113, #17100c);  color: #ffbd88; }
 .bol .nav-button.nav-text-to-audio.selected label, .bol .page-text-to-audio .section-title  { border: 0; color: #ffbd88; }
+.bol .profile-avatar { background: #183827; color: #8cf3c2; border-radius: 9px; padding: 10px; font-weight: 700; }
+.bol .nav-button.nav-profile.selected { background: #19352a; color: #8cf3c2; border: 0; }
+.bol .page-profile .section-title { color: #8cf3c2; }
 .bol scrollbar slider  { background: #515151; min-width: 5px; border-radius: 4px; }
 '''
 
@@ -130,6 +133,7 @@ PAGES = [
     ('Vocabulary','vocabulary','Recognition hints and preferred spellings.'),
     ('Snippets','snippets','Expand a spoken phrase into reusable text.'),
     ('Shortcuts','shortcuts','Keyboard shortcuts and recording controls.'),
+    ('Profile','profile','Your local workspace and personal preferences.'),
 ]
 
 
@@ -217,11 +221,17 @@ class Workspace:
         brand.append(icon);brand.append(label('Bol','brand'));side.append(brand)
         navtitle=label('Workspace','nav-heading');navtitle.set_margin_start(22);navtitle.set_margin_top(9);navtitle.set_margin_bottom(8);side.append(navtitle)
         self.nav={}
+        profile_popover=Gtk.Popover();profile_menu=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=3);margins(profile_menu,8);profile_popover.set_child(profile_menu)
+        self.profile_popover=profile_popover
+        profile_menu.append(label('Workspace settings','nav-heading'))
         for title,icon_name,description in PAGES:
             button=Gtk.Button();button.add_css_class('nav-button');button.add_css_class('nav-'+title.lower().replace(' ','-'));button.set_margin_start(10);button.set_margin_end(10)
             row=Gtk.Box(spacing=12);image=svg_icon(icon_name,18)
-            row.append(image);row.append(label(title));button.set_child(row)
-            button.connect('clicked',lambda b,name=title:self.select(name));side.append(button);self.nav[title]=button
+            row.append(image);row.append(label('Connections' if title=='Providers' else title));button.set_child(row)
+            button.connect('clicked',lambda b,name=title:self.select(name))
+            if title in ['History','Text to Audio']:side.append(button)
+            else:profile_menu.append(button)
+            self.nav[title]=button
         spacer=Gtk.Box();spacer.set_vexpand(True);side.append(spacer)
         quick=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=10);margins(quick,22)
         quick.append(label('Quick access','nav-heading'));self.key_labels={}
@@ -229,7 +239,12 @@ class Workspace:
             row=Gtk.Box();name=label(title,'muted');name.set_hexpand(True);row.append(name)
             value=label(self.settings.get(key,''),'key');row.append(value);self.key_labels[key]=value;quick.append(row)
         side.append(quick)
-        powered=label('Voice workspace for Linux','muted');margins(powered,22);side.append(powered)
+        profile_button=Gtk.MenuButton();profile_button.set_popover(profile_popover);profile_button.set_margin_start(12);profile_button.set_margin_end(12);profile_button.set_margin_top(14);profile_button.set_margin_bottom(18)
+        identity=Gtk.Box(spacing=10);margins(identity,6)
+        self.profile_avatar=label('B','profile-avatar');identity.append(self.profile_avatar)
+        identity_text=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=3);identity_text.set_hexpand(True)
+        self.profile_title=label(self.settings.get('profile_name') or 'Your workspace','section-title');self.profile_title.set_ellipsize(3);self.profile_title.set_max_width_chars(20);identity_text.append(self.profile_title);identity_text.append(label('Profile & settings','muted'));identity.append(identity_text)
+        identity.append(svg_icon('profile',17));profile_button.set_child(identity);side.append(profile_button)
         main=Gtk.Box(orientation=Gtk.Orientation.VERTICAL);main.set_hexpand(True);layout.append(main)
         self.stack=Gtk.Stack();self.stack.set_vexpand(True);self.stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE);self.stack.set_transition_duration(120);main.append(self.stack)
         self.pages={}
@@ -237,7 +252,7 @@ class Workspace:
             scroller=Gtk.ScrolledWindow();scroller.set_policy(Gtk.PolicyType.NEVER,Gtk.PolicyType.AUTOMATIC)
             page=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=20);page.add_css_class('page-'+title.lower().replace(' ','-'));margins(page,42);scroller.set_child(page)
             heading=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=8);heading.set_margin_bottom(9)
-            heading.append(label(title,'page-title'));heading.append(label(description,'muted',True));page.append(heading)
+            heading.append(label('Connections' if title=='Providers' else title,'page-title'));heading.append(label(description,'muted',True));page.append(heading)
             self.stack.add_named(scroller,title);self.pages[title]=page
         footer=Gtk.Box(spacing=12);footer.add_css_class('footer');margins(footer,0)
         inner=Gtk.Box(spacing=12);margins(inner,18);inner.set_hexpand(True);footer.append(inner)
@@ -247,8 +262,10 @@ class Workspace:
         self.cancel_button=action_button('Cancel recording','cancel');cancel=self.cancel_button;cancel.set_visible(False);cancel.connect('clicked',self.cancel_recording);inner.append(cancel)
         self.save_button=Gtk.Button(label='Save changes');self.save_button.add_css_class('primary');self.save_button.set_sensitive(False);self.save_button.connect('clicked',self.save);inner.append(self.save_button)
         main.append(footer)
-        self.build_audio();self.build_general();self.build_providers();self.build_writing();self.build_vocabulary();self.build_snippets();self.build_history();self.build_shortcuts()
-        self.update_provider_sections();self.loading=False;self.select('History');self.window.present()
+        self.build_audio();self.build_general();self.build_providers();self.build_writing();self.build_vocabulary();self.build_snippets();self.build_history();self.build_shortcuts();self.build_profile()
+        self.update_provider_sections();self.loading=False;self.update_profile_identity();self.select(self.settings.get('start_page','History'));self.window.present()
+        configured=bool(self.settings.get('api_key') or self.settings.get('speech_api_key') or self.settings.get('speech_provider')=='whispercpp')
+        if not self.settings.get('setup_completed') and not configured:GLib.idle_add(self.show_setup)
         GLib.timeout_add(800,self.poll)
 
     def section(self,page,title,description=None):
@@ -382,7 +399,7 @@ class Workspace:
         text=self.text('tts_text')
         if not text.strip() or len(text.strip())>2500:self.dialog('Check your text','Enter between 1 and 2500 characters.');return
         key=self.core.config().get('api_key','')
-        if not key:self.dialog('Sarvam key required','Add your Sarvam API key in Providers.');return
+        if not key:self.show_setup();return
         language=TTS_LANGUAGES[self.audio_language.get_selected()];voice=TTS_VOICES[self.audio_voice.get_selected()];pace=self.audio_pace.get_value();expression=self.audio_expression.get_value()
         self.audio_generation+=1;generation=self.audio_generation
         self.audio_generate.set_sensitive(False);self.audio_cancel.set_sensitive(True);self.audio_note.set_text('Generating audio… You can continue using Bol.')
@@ -457,6 +474,98 @@ class Workspace:
             dialog.destroy()
         chooser.connect('response',response);chooser.show()
 
+    def update_profile_identity(self):
+        name=(self.settings.get('profile_name') or 'Your workspace').strip()
+        self.profile_title.set_text(name)
+        self.profile_avatar.set_text(''.join(part[0] for part in name.split()[:2]).upper() or 'B')
+
+    def build_profile(self):
+        page=self.pages['Profile']
+        group=self.section(page,'Your profile','This profile lives on this computer. It is not a cloud account or a Sarvam sign-in.')
+        self.entry(group,'profile_name','Display name','How Bol labels your workspace.').set_placeholder_text('Your name')
+        self.widgets['profile_name'].set_max_length(80)
+        group=self.section(page,'Workspace preferences')
+        self.choice(group,'start_page','Open Bol to','Choose your default workspace.',['History','Text to Audio'],{})
+        self.toggle(group,'show_advanced','Expand advanced connections','Show provider URLs, keys, and model paths when opening Connections.')
+        group=self.section(page,'Setup')
+        setup=Gtk.Button(label='Open setup assistant');setup.connect('clicked',lambda b:self.show_setup());self.row(group,'Speech setup','Connect a cloud service or choose local Whisper.',setup)
+        page.append(label('Your existing history, vocabulary, snippets, providers, and writing preferences are shared by this local workspace. There is no account synchronization yet.','muted',True))
+
+    def show_setup(self,*args):
+        dialog=Gtk.Window(title='Welcome to Bol',transient_for=self.window,modal=True);dialog.add_css_class('bol');dialog.set_default_size(680,660)
+        scroller=Gtk.ScrolledWindow();scroller.set_policy(Gtk.PolicyType.NEVER,Gtk.PolicyType.AUTOMATIC);dialog.set_child(scroller)
+        box=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=18);margins(box,28);scroller.set_child(box)
+        box.append(label('Make Bol yours','page-title'));box.append(label('A few simple choices, then you are ready to speak.','muted',True))
+        name=Gtk.Entry();name.set_max_length(80);name.set_placeholder_text('Your name (optional)');name.set_text(self.settings.get('profile_name',''));box.append(name)
+        options=Gtk.DropDown.new_from_strings(['Sarvam cloud · multilingual speech','Local Whisper · on this device'])
+        options.set_selected(1 if self.settings.get('speech_provider')=='whispercpp' else 0);box.append(options)
+        language=Gtk.DropDown.new_from_strings([LANGUAGE_NAMES.get(value,value) for value in LANGUAGES]);language.set_selected(LANGUAGES.index(self.settings.get('language','unknown')) if self.settings.get('language') in LANGUAGES else 0)
+        box.append(label('Language','section-title'));box.append(language)
+        cloud=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=12)
+        cloud.append(label('Connect Sarvam','section-title'))
+        cloud.append(label('1. Open Sarvam in your browser and sign in.\n2. Create a key in API Keys.\n3. Copy it once and paste it below. Bol remembers it.','muted',True))
+        browser=Gtk.Button(label='Open Sarvam sign-in');browser.connect('clicked',lambda b:self.open_sarvam_dashboard());cloud.append(browser)
+        key=Gtk.PasswordEntry(show_peek_icon=True);key.set_text(self.settings.get('api_key',''));cloud.append(key)
+        paste=Gtk.Button(label='Paste copied key')
+        def paste_key(button):
+            clipboard=Gdk.Display.get_default().get_clipboard()
+            def pasted(clipboard,result):
+                try:
+                    text=clipboard.read_text_finish(result)
+                    if text and len(text.strip())<=4096:key.set_text(text.strip())
+                    else:note.set_text('Copy the connection key on the Sarvam page, then try again.')
+                except Exception as error:note.set_text(str(error))
+            clipboard.read_text_async(None,pasted)
+        paste.connect('clicked',paste_key);cloud.append(paste)
+        cloud.append(label('Sarvam currently requires a connection key for third-party apps. Your website login is not copied into Bol. Cloud usage may consume credits.','muted',True));box.append(cloud)
+        local=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=10)
+        binary,model=detect_whisper()
+        local.append(label('Use local Whisper','section-title'))
+        local.append(label('No browser account or connection key is needed for local dictation. Audio stays on this device. AI writing and Text to Audio are separate cloud features.','muted',True))
+        local.append(label('Whisper installation found.' if binary and model else 'No complete Whisper installation found. Choose model paths later in Profile → Providers → Advanced settings.','muted',True))
+        if '.en.' in model:local.append(label('The detected model is English-only. Select English or automatic detection, or install a multilingual model for other languages.','muted',True))
+        box.append(local)
+        note=label('Your settings are stored on this computer.','muted',True);box.append(note)
+        buttons=Gtk.Box(spacing=10);later=Gtk.Button(label='Set up later');later.connect('clicked',lambda b:dialog.close());buttons.append(later)
+        gap=Gtk.Box();gap.set_hexpand(True);buttons.append(gap)
+        finish=Gtk.Button(label='Finish setup');finish.add_css_class('primary');buttons.append(finish);box.append(buttons)
+        def route(*args):cloud.set_visible(options.get_selected()==0);local.set_visible(options.get_selected()==1)
+        options.connect('notify::selected',route);route()
+        def complete(button):
+            try:
+                data=self.core.config();data.update({'profile_name':name.get_text().strip(),'language':LANGUAGES[language.get_selected()],'setup_completed':True})
+                if options.get_selected()==0:
+                    if not key.get_text().strip():raise ValueError('Paste your Sarvam key to finish, or choose local Whisper.')
+                    data['speech_provider']='sarvam';data['api_key']=key.get_text().strip()
+                else:
+                    data['speech_provider']='whispercpp'
+                    if not data.get('whisper_binary'):data['whisper_binary']=binary
+                    if not data.get('whisper_model'):data['whisper_model']=model
+                    validate_speech(data)
+                dirty=self.save_button.get_sensitive();self.core.save_config(data);self.sync_controls(data,only=['profile_name','language','speech_provider','api_key','whisper_binary','whisper_model'],preserve_dirty=dirty);dialog.close();self.select(data.get('start_page','History'));self.status.set_text('Setup complete')
+            except Exception as error:note.set_text(str(error))
+        finish.connect('clicked',complete);dialog.present();return False
+
+    def sync_controls(self,data,only=None,preserve_dirty=False):
+        self.loading=True
+        try:
+            for key,widget in self.widgets.items():
+                if only is not None and key not in only:continue
+                value=data.get(key)
+                if key in self.choices:
+                    choices=self.choices[key]
+                    if value in choices:widget.set_selected(choices.index(value))
+                elif isinstance(widget,Gtk.Switch):widget.set_active(bool(value))
+                elif isinstance(widget,Gtk.SpinButton):widget.set_value(value or 0)
+                elif value is not None:widget.set_text(str(value))
+            self.settings=data;self.update_profile_identity();self.update_provider_sections()
+            self.save_note.set_text('Connection saved. Other changes are unsaved.' if preserve_dirty else 'All changes saved');self.save_button.set_sensitive(preserve_dirty)
+        finally:self.loading=False
+
+    def open_sarvam_dashboard(self):
+        try:Gio.AppInfo.launch_default_for_uri('https://dashboard.sarvam.ai/key-management',None)
+        except Exception as error:self.dialog('Could not open browser',str(error))
+
     def build_general(self):
         page=self.pages['General'];group=self.section(page,'Speech recognition')
         self.choice(group,'speech_provider','Speech engine','Configure keys and model paths in Providers.',SPEECH_PROVIDERS,{'sarvam':'Sarvam cloud','whispercpp':'Local whisper.cpp','compatible':'Compatible speech API'})
@@ -478,6 +587,10 @@ class Workspace:
 
     def build_providers(self):
         page=self.pages['Providers'];self.provider_sections={}
+        group=self.section(page,'Connect your speech service','Use the setup assistant to connect Sarvam or get started with local Whisper. Browser sign-in is handled on the provider website.')
+        connect=Gtk.Button(label='Open setup assistant');connect.add_css_class('primary');connect.connect('clicked',lambda b:self.show_setup());self.row(group,'Guided connection','For everyday setup, you do not need to edit endpoint URLs.',connect)
+        advanced=Gtk.Expander(label='Advanced provider settings');self.connection_details=advanced;advanced.set_expanded(self.settings.get('show_advanced',False));page.append(advanced)
+        details=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=18);details.set_margin_top(18);advanced.set_child(details);page=details
         group=self.section(page,'Sarvam credentials','Used for Sarvam speech recognition and Sarvam AI writing.')
         self.entry(group,'api_key','Sarvam API key','Your existing key is preserved.',True)
         self.provider_sections['sarvam']=group.get_parent()
@@ -680,10 +793,13 @@ class Workspace:
         buffer=self.buffers[key];return buffer.get_text(buffer.get_start_iter(),buffer.get_end_iter(),True)
 
     def select(self,title):
+        if title not in self.pages:title='History'
         self.stack.set_visible_child_name(title)
         for name,button in self.nav.items():
             if name==title:button.add_css_class('selected')
             else:button.remove_css_class('selected')
+        self.profile_popover.popdown()
+        if title=='Providers':self.connection_details.set_expanded(self.settings.get('show_advanced',False))
         if title=='History':self.action(self.refresh_history)
 
     def save(self,*args):
@@ -701,6 +817,7 @@ class Workspace:
             for key in ['profiles','corrections','snippets']:data[key]=parse_pairs(self.text(key))
             if any(data.get(k)!=self.settings.get(k) for k in ['record_key','cancel_key','edit_key','hold_to_talk']):apply_shortcuts(data)
             self.core.save_config(data);self.settings=data
+            self.update_profile_identity()
             for key,widget in self.key_labels.items():widget.set_text(data[key])
             self.save_note.set_text('All changes saved');self.save_button.set_sensitive(False)
         except Exception as error:self.dialog('Could not save',str(error))

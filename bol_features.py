@@ -11,6 +11,7 @@ import urllib.error
 LANGUAGES = ['unknown', 'en-IN', 'hi-IN', 'pa-IN', 'bn-IN', 'kn-IN', 'ml-IN', 'mr-IN', 'od-IN', 'ta-IN', 'te-IN', 'gu-IN', 'as-IN', 'ur-IN', 'ne-IN', 'kok-IN', 'sa-IN', 'sd-IN', 'ks-IN', 'doi-IN', 'brx-IN', 'mni-IN', 'mai-IN', 'sat-IN']
 MODES = ['transcribe', 'codemix', 'translit', 'translate', 'verbatim']
 DEFAULTS = {
+    'profile_name': '', 'start_page': 'History', 'show_advanced': False, 'setup_completed': False,
     'speech_provider': 'sarvam', 'writing_provider': 'sarvam',
     'whisper_binary': '', 'whisper_model': '', 'local_speech_writing': False,
     'speech_api_url': '', 'speech_api_model': '', 'speech_api_key': '',
