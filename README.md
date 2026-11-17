@@ -1,6 +1,6 @@
 # Bol — a Linux voice workspace
 
-An independent voice typing and writing app for **Hyprland / Wayland**. Inspired by Kivi's workflow; not affiliated with Sarvam or Kivi. Supports Sarvam, local whisper.cpp, and configurable compatible speech/writing APIs. Local dictation needs no API key.
+An independent voice typing and writing app for **Hyprland / Wayland**. Inspired by Kivi's workflow; not affiliated with Sarvam or Kivi. Supports Sarvam, local whisper.cpp, ElevenLabs through official CLI browser sign-in, and configurable compatible speech/writing APIs. Local dictation needs no API key.
 
 ## Features
 
@@ -51,7 +51,7 @@ For a first installation without configured speech access, Bol opens a setup ass
 - **Sarvam cloud:** the assistant opens Sarvam's key-management page in your default browser. Sign in there, create/copy a connection key once, then paste it into Bol (or click Paste copied key). Bol saves the key privately. The assistant does not read browser cookies, scrape keys, or automatically create credentials. Saving a key is not a live API-authentication test.
 - **Local Whisper:** the assistant detects your existing installation and model and validates their paths. No browser account or API key is required for local dictation. An English-only model requires English/auto language selection.
 
-Sarvam's [public authentication documentation](https://docs.sarvam.ai/api-reference/authentication) requires manually generated subscription keys; it does not document delegated consumer OAuth for this use case. A browser session alone cannot authorize Bol API calls. Fully keyless Bol sign-in would require a separately hosted Bol account/backend or an official provider authorization flow; neither is implemented here.
+Sarvam's [public authentication documentation](https://docs.sarvam.ai/api-reference/authentication) requires manually generated subscription keys; it does not document delegated consumer OAuth for this use case. A browser session alone cannot authorize Bol API calls. Fully keyless Bol sign-in would require a separately hosted Bol account/backend or an official provider authorization flow; a Bol-hosted account/backend and Sarvam OAuth are not implemented here. ElevenLabs separately supports browser sign-in through its official CLI, as described below.
 
 ## Speech and writing providers
 
@@ -67,6 +67,25 @@ Local Whisper's `.en` models are English-only. Select **English** or **Detect au
 With local speech, **AI writing with local speech** is **off by default**, even if Polish was previously enabled. This keeps ordinary local dictation offline. Enable it explicitly in Providers to use polish or voice editing with your chosen writing endpoint. This may send text off-device if that endpoint is remote. Local corrections, snippets, clipboard insertion and history continue to work without network access.
 
 The compatible APIs have been tested against a local protocol fixture; individual cloud providers may differ in supported models and options. There is no silent fallback from local to cloud.
+
+## ElevenLabs browser sign-in
+
+Bol can use the [official ElevenLabs CLI browser authorization flow](https://elevenlabs.io/docs/eleven-agents/operate/cli). This does not scrape the provider website or copy credentials into Bol settings.
+
+1. Open **Profile & settings → Connections**.
+2. Choose **Install sign-in helper** if needed (requires Node.js/npm; installs pinned `@elevenlabs/cli@1.12.1` in Bol's local tools directory). The helper is already installed on the development machine.
+3. Click **Sign in with ElevenLabs** and complete authorization in your browser.
+4. Use **Check connection**, then choose **ElevenLabs** as the speech engine in **Preferences** and save.
+
+The helper manages its own credential storage, using an OS keyring when available or its documented private-file fallback. **Disconnect ElevenLabs** runs the helper's logout operation; it does not close your provider account. Environment-supplied ElevenLabs credentials can still be used by the helper independently of its saved login.
+
+The default speech model is `scribe_v2`, configurable under Advanced provider settings. Original-language transcription is supported; billing and credits belong to your ElevenLabs account. OAuth login itself has not been performed for you, and live account transcription must be verified after your authorization. Tests cover helper invocation/status, output handling and request construction.
+
+## Window controls
+
+The title bar has **Minimize**, **Hide**, and **Close** controls. Hide keeps the window and unsaved state in memory; reopening Bol from its launcher restores the same window. Hyprland does not implement conventional minimization, so Minimize uses Hide there. Close closes settings and stops its preview playback, while the separate dictation daemon remains available.
+
+The settings menu is rendered inside the app overlay rather than as an unconstrained desktop popup, and uses a slim overlay scrollbar when needed.
 
 ## Text to Audio
 

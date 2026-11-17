@@ -10,7 +10,7 @@ import urllib.request
 import urllib.error
 import uuid
 
-SPEECH_PROVIDERS=['sarvam','whispercpp','compatible']
+SPEECH_PROVIDERS=['sarvam','whispercpp','compatible','elevenlabs']
 WRITING_PROVIDERS=['sarvam','compatible']
 
 
@@ -53,6 +53,10 @@ def validate_speech(settings):
         if not settings.get('speech_api_model','').strip():raise ValueError('Enter a speech model ID.')
         if settings.get('output_mode','transcribe') not in ['transcribe','verbatim']:
             raise ValueError('The compatible speech endpoint uses transcription. Select original language or verbatim.')
+    elif provider=='elevenlabs':
+        from bol_elevenlabs import cli_path
+        if not cli_path():raise ValueError('Install the ElevenLabs sign-in helper in Connections.')
+        if settings.get('output_mode','transcribe') not in ['transcribe','verbatim']:raise ValueError('ElevenLabs dictation supports original-language transcription. Select that output style.')
     else:raise ValueError('Unknown speech provider.')
 
 

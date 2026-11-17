@@ -86,6 +86,9 @@ def transcribe_one(path, settings):
 
 
 def transcribe(path, settings, cancelled=lambda: False, on_process=lambda p: None):
+    if settings.get('speech_provider') == 'elevenlabs':
+        from bol_elevenlabs import transcribe as elevenlabs_transcribe
+        return elevenlabs_transcribe(path,settings,cancelled,on_process)
     if settings.get('speech_provider') == 'whispercpp':
         return transcribe_local(path, settings, cancelled, on_process)
     with wave.open(str(path), 'rb') as audio:

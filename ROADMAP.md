@@ -63,4 +63,6 @@ A real keyless account experience needs a separate project:
 - Define account quotas, cost ownership, logout/revocation, and optional preference synchronization.
 - Keep local dictation available without an account and make cloud processing an explicit choice.
 
+An ElevenLabs CLI browser-sign-in adapter is now implemented; account authorization and a live account transcription still need user verification. It uses the official provider helper, not a Bol-hosted identity service.
+
 Provider dashboard cookies or website sign-in pages are not a replacement for a supported API authorization flow. No backend or billing service has been deployed for Bol.

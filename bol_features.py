@@ -12,7 +12,7 @@ LANGUAGES = ['unknown', 'en-IN', 'hi-IN', 'pa-IN', 'bn-IN', 'kn-IN', 'ml-IN', 'm
 MODES = ['transcribe', 'codemix', 'translit', 'translate', 'verbatim']
 DEFAULTS = {
     'profile_name': '', 'start_page': 'History', 'show_advanced': False, 'setup_completed': False,
-    'speech_provider': 'sarvam', 'writing_provider': 'sarvam',
+    'speech_provider': 'sarvam', 'elevenlabs_model': 'scribe_v2', 'writing_provider': 'sarvam',
     'whisper_binary': '', 'whisper_model': '', 'local_speech_writing': False,
     'speech_api_url': '', 'speech_api_model': '', 'speech_api_key': '',
     'writing_api_url': '', 'writing_api_model': '', 'writing_api_key': '',

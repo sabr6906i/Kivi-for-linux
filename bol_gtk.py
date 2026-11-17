@@ -119,9 +119,9 @@ window.bol  { background: #090909; color: #ececec; font-family: 'Noto Sans', san
 .bol .profile-avatar { background: #183827; color: #8cf3c2; border-radius: 9px; padding: 10px; font-weight: 700; }
 .bol .nav-button.nav-profile.selected { background: #19352a; color: #8cf3c2; border: 0; }
 .bol .page-profile .section-title { color: #8cf3c2; }
-.bol .profile-card > button { background: linear-gradient(to bottom, #191d1d, #131616); border: 0; border-radius: 13px; padding: 0; box-shadow: none; }
-.bol .profile-card > button:hover { background: linear-gradient(to bottom, #252d2b, #1a211f); }
-.bol .profile-card > button:checked { background: #202b27; }
+.bol button.profile-card { background: linear-gradient(to bottom, #191d1d, #131616); border: 0; border-radius: 13px; padding: 0; box-shadow: none; }
+.bol button.profile-card:hover { background: linear-gradient(to bottom, #252d2b, #1a211f); }
+.bol button.profile-card:checked { background: #202b27; }
 .bol .profile-avatar { background: linear-gradient(145deg, #24664a, #123c2e); color: #a7ffd1; border: 0; border-radius: 11px; padding: 0; font-size: 14px; font-weight: 700; }
 .bol .profile-name { color: #f2f4f3; font-size: 13px; font-weight: 600; }
 .bol .profile-caption { color: #8f9a95; font-size: 11px; font-weight: 400; }
@@ -141,6 +141,14 @@ window.bol  { background: #090909; color: #ececec; font-family: 'Noto Sans', san
 .bol .profile-menu .well-shortcuts { background: #282540; }
 .bol .profile-menu .menu-setup { background: transparent; border: 0; padding: 14px 17px; border-radius: 9px; margin: 4px; color: #a3d9be; }
 .bol .profile-menu .menu-setup:hover { background: #222c26; }
+.bol .profile-menu-panel { background: #141717; border: 0; border-radius: 15px; padding: 3px; box-shadow: 0 6px 20px alpha(black, 0.35); }
+.bol scrollbar.vertical, .bol scrollbar.vertical contents, .bol scrollbar.vertical trough { min-width: 4px; background: transparent; border: 0; padding: 0; margin: 0; }
+.bol scrollbar.vertical slider { min-width: 4px; min-height: 30px; background: #454b48; border: 0; margin: 0; border-radius: 3px; }
+.bol scrollbar.vertical:hover slider { background: #74867b; min-width: 5px; }
+.bol .window-control { min-width: 28px; min-height: 28px; padding: 2px; border: 0; border-radius: 8px; background: transparent; box-shadow: none; }
+.bol .window-control.minimize-control:hover { background: #3d301b; }
+.bol .window-control.hide-control:hover { background: #17333a; }
+.bol .window-control.close-control:hover { background: #45202b; }
 .bol scrollbar slider  { background: #515151; min-width: 5px; border-radius: 4px; }
 '''
 
@@ -199,8 +207,24 @@ def label(text, css=None, wrap=False):
     return widget
 
 
+class SettingsPanel(Gtk.Revealer):
+    def __init__(self):
+        super().__init__()
+        self.set_transition_type(Gtk.RevealerTransitionType.CROSSFADE)
+        self.set_transition_duration(100)
+        self.set_halign(Gtk.Align.START);self.set_valign(Gtk.Align.END)
+        self.set_margin_start(12);self.set_margin_bottom(88)
+        self.add_css_class('profile-menu');self.set_visible(False)
+
+    def popup(self):
+        self.set_visible(True);self.set_reveal_child(True)
+
+    def popdown(self):
+        self.set_reveal_child(False);self.set_visible(False)
+
+
 class Workspace:
-    def __init__(self, core):
+    def __init__(self, core, single_instance=True):
         self.core=core
         self.settings=core.config()
         self.widgets={}
@@ -218,7 +242,7 @@ class Workspace:
         self.audio_directory=None
         self.audio_player=None
         self.audio_style_generation=0
-        self.app=Gtk.Application(application_id='io.github.bol.Workspace', flags=Gio.ApplicationFlags.NON_UNIQUE)
+        self.app=Gtk.Application(application_id='io.github.bol.Workspace', flags=Gio.ApplicationFlags.DEFAULT_FLAGS if single_instance else Gio.ApplicationFlags.NON_UNIQUE)
         self.app.connect('activate', self.activate)
 
     def changed(self,*args):
@@ -227,15 +251,21 @@ class Workspace:
             self.save_button.set_sensitive(True)
 
     def activate(self,app):
+        if hasattr(self,'window') and self.alive:
+            self.window.present();return
         provider=Gtk.CssProvider(); provider.load_from_data(CSS)
         Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(),provider,Gtk.STYLE_PROVIDER_PRIORITY_USER + 1)
         self.window=Gtk.ApplicationWindow(application=app,title='Bol')
         self.window.add_css_class('bol'); self.window.set_default_size(1120,800)
         self.window.set_size_request(900,620)
         self.window.connect('close-request',self.on_close)
-        header=Gtk.HeaderBar();header.set_title_widget(label('Bol','section-title'));self.window.set_titlebar(header)
+        header=Gtk.HeaderBar();header.set_show_title_buttons(False);header.set_title_widget(label('Bol','section-title'))
+        controls=Gtk.Box(spacing=5)
+        for title,icon,callback,css in [('Minimize','minimize',self.minimize_window,'minimize-control'),('Hide · open Bol again to restore','hide',self.hide_window,'hide-control'),('Close window','close',lambda:self.window.close(),'close-control')]:
+            button=Gtk.Button();button.set_child(svg_icon(icon,16));button.add_css_class('window-control');button.add_css_class(css);button.set_tooltip_text(title);button.connect('clicked',lambda b,fn=callback:fn());controls.append(button)
+        header.pack_end(controls);self.window.set_titlebar(header)
         layout=Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-        self.window.set_child(layout)
+        overlay=Gtk.Overlay();self.window.set_child(overlay);overlay.set_child(layout);self.window_overlay=overlay
         side=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=6)
         side.add_css_class('sidebar');side.set_size_request(224,-1);side.set_hexpand(False);layout.append(side)
         brand=Gtk.Box(spacing=10);margins(brand,22)
@@ -243,8 +273,8 @@ class Workspace:
         brand.append(icon);brand.append(label('Bol','brand'));side.append(brand)
         navtitle=label('Workspace','nav-heading');navtitle.set_margin_start(22);navtitle.set_margin_top(9);navtitle.set_margin_bottom(8);side.append(navtitle)
         self.nav={}
-        profile_popover=Gtk.Popover();profile_popover.add_css_class('profile-menu');profile_popover.set_has_arrow(False);profile_popover.set_position(Gtk.PositionType.TOP);profile_popover.set_offset(0,-8)
-        profile_menu=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=0);profile_menu.set_size_request(296,-1);profile_popover.set_child(profile_menu)
+        profile_popover=SettingsPanel();overlay.add_overlay(profile_popover)
+        profile_menu=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=0);profile_menu.add_css_class('profile-menu-panel');profile_menu.set_size_request(296,-1);profile_popover.set_child(profile_menu)
         self.profile_popover=profile_popover
         menu_identity=Gtk.Box(spacing=12);margins(menu_identity,15)
         self.profile_menu_avatar=label('B','profile-avatar');self.profile_menu_avatar.set_xalign(.5);self.profile_menu_avatar.set_size_request(40,40);menu_identity.append(self.profile_menu_avatar)
@@ -268,7 +298,7 @@ class Workspace:
             'Snippets':('Snippets','Reusable spoken shortcuts','snippets'),
             'Shortcuts':('Keyboard shortcuts','Dictation and editing controls','shortcuts'),
         }
-        menu_scroll=Gtk.ScrolledWindow();menu_scroll.set_policy(Gtk.PolicyType.NEVER,Gtk.PolicyType.AUTOMATIC);menu_scroll.set_propagate_natural_height(True);menu_scroll.set_max_content_height(460)
+        menu_scroll=Gtk.ScrolledWindow();self.settings_menu_scroll=menu_scroll;menu_scroll.set_overlay_scrolling(True);menu_scroll.set_policy(Gtk.PolicyType.NEVER,Gtk.PolicyType.AUTOMATIC);menu_scroll.set_propagate_natural_height(True);menu_scroll.set_max_content_height(460)
         menu_items=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=2);margins(menu_items,7);menu_scroll.set_child(menu_items);profile_menu.append(menu_scroll)
         for group,items in [('Workspace',['Profile','General','Providers']),('Personalization',['Writing','Vocabulary','Snippets']),('Controls',['Shortcuts'])]:
             group_title=label(group,'menu-group');group_title.set_margin_start(10);group_title.set_margin_top(10);group_title.set_margin_bottom(5);menu_items.append(group_title)
@@ -289,18 +319,20 @@ class Workspace:
             row=Gtk.Box();name=label(title,'muted');name.set_hexpand(True);row.append(name)
             value=label(self.settings.get(key,''),'key');row.append(value);self.key_labels[key]=value;quick.append(row)
         side.append(quick)
-        profile_button=Gtk.MenuButton();self.profile_button=profile_button;profile_button.add_css_class('profile-card');profile_button.set_popover(profile_popover);profile_button.set_margin_start(12);profile_button.set_margin_end(12);profile_button.set_margin_top(14);profile_button.set_margin_bottom(18)
+        profile_button=Gtk.Button();self.profile_button=profile_button;profile_button.add_css_class('profile-card');profile_button.connect('clicked',self.toggle_settings_menu);profile_button.set_margin_start(12);profile_button.set_margin_end(12);profile_button.set_margin_top(14);profile_button.set_margin_bottom(18)
         identity=Gtk.Box(spacing=11);margins(identity,10)
         self.profile_avatar=label('B','profile-avatar');self.profile_avatar.set_xalign(.5);self.profile_avatar.set_size_request(36,36);identity.append(self.profile_avatar)
         identity_text=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=4);identity_text.set_hexpand(True)
         self.profile_title=label(self.settings.get('profile_name') or 'Your workspace','profile-name');self.profile_title.set_ellipsize(3);self.profile_title.set_max_width_chars(16);identity_text.append(self.profile_title)
         identity_text.append(label('Profile & settings','profile-caption'));identity.append(identity_text)
         identity.append(svg_icon('chevrons',14));profile_button.set_child(identity);side.append(profile_button)
+        keys=Gtk.EventControllerKey();keys.connect('key-pressed',self.window_key);self.window.add_controller(keys)
+        click=Gtk.GestureClick();click.set_propagation_phase(Gtk.PropagationPhase.CAPTURE);click.connect('pressed',self.outside_settings_click);self.window.add_controller(click)
         main=Gtk.Box(orientation=Gtk.Orientation.VERTICAL);main.set_hexpand(True);layout.append(main)
         self.stack=Gtk.Stack();self.stack.set_vexpand(True);self.stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE);self.stack.set_transition_duration(120);main.append(self.stack)
         self.pages={}
         for title,icon_name,description in PAGES:
-            scroller=Gtk.ScrolledWindow();scroller.set_policy(Gtk.PolicyType.NEVER,Gtk.PolicyType.AUTOMATIC)
+            scroller=Gtk.ScrolledWindow();scroller.set_overlay_scrolling(True);scroller.set_policy(Gtk.PolicyType.NEVER,Gtk.PolicyType.AUTOMATIC)
             page=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=20);page.add_css_class('page-'+title.lower().replace(' ','-'));margins(page,42);scroller.set_child(page)
             heading=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=8);heading.set_margin_bottom(9)
             heading.append(label('Connections' if title=='Providers' else title,'page-title'));heading.append(label(description,'muted',True));page.append(heading)
@@ -315,9 +347,39 @@ class Workspace:
         main.append(footer)
         self.build_audio();self.build_general();self.build_providers();self.build_writing();self.build_vocabulary();self.build_snippets();self.build_history();self.build_shortcuts();self.build_profile()
         self.update_provider_sections();self.loading=False;self.update_profile_identity();self.select(self.settings.get('start_page','History'));self.window.present()
-        configured=bool(self.settings.get('api_key') or self.settings.get('speech_api_key') or self.settings.get('speech_provider')=='whispercpp')
+        configured=bool(self.settings.get('api_key') or self.settings.get('speech_api_key') or self.settings.get('speech_provider') in ['whispercpp','elevenlabs'])
         if not self.settings.get('setup_completed') and not configured:GLib.idle_add(self.show_setup)
         GLib.timeout_add(800,self.poll)
+
+    def minimize_window(self):
+        import os
+        if os.environ.get('HYPRLAND_INSTANCE_SIGNATURE'):
+            # Hyprland has no conventional minimize operation; hide preserves the window.
+            self.hide_window()
+        else:self.window.minimize()
+
+    def hide_window(self):
+        self.profile_popover.popdown();self.window.set_visible(False)
+        self.core.notify('Bol is hidden. Open Bol again to restore this window. Dictation shortcuts still work.')
+
+    def toggle_settings_menu(self,*args):
+        if self.profile_popover.get_visible():self.profile_popover.popdown()
+        else:
+            self.settings_menu_scroll.set_max_content_height(max(150,min(460,self.window.get_height()-330)))
+            self.profile_popover.popup()
+
+    def window_key(self,controller,keyval,keycode,state):
+        if keyval==Gdk.KEY_Escape and self.profile_popover.get_visible():
+            self.profile_popover.popdown();return True
+        return False
+
+    def outside_settings_click(self,gesture,presses,x,y):
+        if not self.profile_popover.get_visible():return
+        widget=self.window.pick(x,y,Gtk.PickFlags.DEFAULT)
+        while widget:
+            if widget in [self.profile_popover,self.profile_button]:return
+            widget=widget.get_parent()
+        self.profile_popover.popdown()
 
     def section(self,page,title,description=None):
         section=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=10)
@@ -550,7 +612,7 @@ class Workspace:
         box.append(label('Make Bol yours','page-title'));box.append(label('A few simple choices, then you are ready to speak.','muted',True))
         name=Gtk.Entry();name.set_max_length(80);name.set_placeholder_text('Your name (optional)');name.set_text(self.settings.get('profile_name',''));box.append(name)
         options=Gtk.DropDown.new_from_strings(['Sarvam cloud · multilingual speech','Local Whisper · on this device'])
-        options.set_selected(1 if self.settings.get('speech_provider')=='whispercpp' else 0);box.append(options)
+        options.set_selected(1 if self.settings.get('speech_provider') in ['whispercpp','elevenlabs'] else 0);box.append(options)
         language=Gtk.DropDown.new_from_strings([LANGUAGE_NAMES.get(value,value) for value in LANGUAGES]);language.set_selected(LANGUAGES.index(self.settings.get('language','unknown')) if self.settings.get('language') in LANGUAGES else 0)
         box.append(label('Language','section-title'));box.append(language)
         cloud=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=12)
@@ -620,7 +682,7 @@ class Workspace:
 
     def build_general(self):
         page=self.pages['General'];group=self.section(page,'Speech recognition')
-        self.choice(group,'speech_provider','Speech engine','Configure keys and model paths in Providers.',SPEECH_PROVIDERS,{'sarvam':'Sarvam cloud','whispercpp':'Local whisper.cpp','compatible':'Compatible speech API'})
+        self.choice(group,'speech_provider','Speech engine','Configure keys and model paths in Providers.',SPEECH_PROVIDERS,{'sarvam':'Sarvam cloud','whispercpp':'Local whisper.cpp','compatible':'Compatible speech API','elevenlabs':'ElevenLabs · browser sign-in'})
         self.widgets['speech_provider'].connect('notify::selected',lambda *args:self.update_provider_sections())
         group=self.section(page,'Speech')
         self.choice(group,'language','Language','Choose a language or let Bol detect it.',LANGUAGES,LANGUAGE_NAMES)
@@ -641,6 +703,13 @@ class Workspace:
         page=self.pages['Providers'];self.provider_sections={}
         group=self.section(page,'Connect your speech service','Use the setup assistant to connect Sarvam or get started with local Whisper. Browser sign-in is handled on the provider website.')
         connect=Gtk.Button(label='Open setup assistant');connect.add_css_class('primary');connect.connect('clicked',lambda b:self.show_setup());self.row(group,'Guided connection','For everyday setup, you do not need to edit endpoint URLs.',connect)
+        group=self.section(page,'ElevenLabs','Browser sign-in through the official ElevenLabs CLI. Credentials are managed by that helper, not copied into Bol settings.')
+        self.eleven_status_label=label('Use Check connection to see whether you are signed in.','muted',True);margins(self.eleven_status_label,16);group.append(self.eleven_status_label)
+        buttons=Gtk.FlowBox();buttons.set_selection_mode(Gtk.SelectionMode.NONE);buttons.set_max_children_per_line(2);buttons.set_column_spacing(8);buttons.set_row_spacing(8);margins(buttons,12)
+        self.eleven_buttons=[]
+        for title,action in [('Sign in with ElevenLabs','login'),('Check connection','status'),('Install sign-in helper','install'),('Disconnect ElevenLabs','logout')]:
+            button=Gtk.Button(label=title);button.connect('clicked',lambda b,a=action:self.eleven_action(a));buttons.insert(button,-1);self.eleven_buttons.append(button)
+        group.append(buttons)
         advanced=Gtk.Expander(label='Advanced provider settings');self.connection_details=advanced;advanced.set_expanded(self.settings.get('show_advanced',False));page.append(advanced)
         details=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=18);details.set_margin_top(18);advanced.set_child(details);page=details
         group=self.section(page,'Sarvam credentials','Used for Sarvam speech recognition and Sarvam AI writing.')
@@ -657,6 +726,9 @@ class Workspace:
         self.entry(group,'speech_api_model','Speech model','For example: whisper-large-v3-turbo')
         self.entry(group,'speech_api_key','API key','Leave blank only for a server that does not require authentication.',True)
         self.provider_sections['speech_api']=group.get_parent()
+        group=self.section(page,'ElevenLabs speech model')
+        self.entry(group,'elevenlabs_model','Model ID','Default: scribe_v2. Your ElevenLabs account must have speech-to-text access.')
+        self.provider_sections['elevenlabs']=group.get_parent()
         group=self.section(page,'AI writing provider','Used for polish and voice editing, independently of speech recognition.')
         self.choice(group,'writing_provider','Writing engine','Select the API that should receive writing requests.',WRITING_PROVIDERS,{'sarvam':'Sarvam','compatible':'Compatible chat API'})
         self.widgets['writing_provider'].connect('notify::selected',lambda *args:self.update_provider_sections())
@@ -672,8 +744,28 @@ class Workspace:
         if not hasattr(self,'provider_sections') or 'writing_provider' not in self.widgets:return
         speech=SPEECH_PROVIDERS[self.widgets['speech_provider'].get_selected()]
         writing=WRITING_PROVIDERS[self.widgets['writing_provider'].get_selected()]
-        for name,visible in {'sarvam':speech=='sarvam' or writing=='sarvam','local':speech=='whispercpp','speech_api':speech=='compatible','writing_api':writing=='compatible'}.items():
+        for name,visible in {'sarvam':speech=='sarvam' or writing=='sarvam','local':speech=='whispercpp','speech_api':speech=='compatible','writing_api':writing=='compatible','elevenlabs':speech=='elevenlabs'}.items():
             self.provider_sections[name].set_visible(visible)
+
+    def eleven_action(self,action):
+        from bol_elevenlabs import status,account_action
+        for button in self.eleven_buttons:button.set_sensitive(False)
+        self.eleven_status_label.set_text('Opening browser sign-in…' if action=='login' else 'Updating connection…')
+        def process(value):self.eleven_login_process=value
+        def worker():
+            try:result=status() if action=='status' else account_action(action,process);error=None
+            except Exception as exc:result=None;error=str(exc)
+            GLib.idle_add(self.eleven_finished,result,error)
+        threading.Thread(target=worker,daemon=True).start()
+
+    def eleven_finished(self,result,error):
+        if not self.alive:return False
+        for button in self.eleven_buttons:button.set_sensitive(True)
+        if error:self.eleven_status_label.set_text(error)
+        elif result.get('logged_in'):self.eleven_status_label.set_text('Signed in. Choose ElevenLabs as the speech engine in Preferences, then save.')
+        elif result.get('installed'):self.eleven_status_label.set_text('The helper is installed. Sign in with ElevenLabs to connect your account.')
+        else:self.eleven_status_label.set_text('Install the official sign-in helper, then sign in with ElevenLabs.')
+        return False
 
     def detect_local(self,*args):
         binary,model=detect_whisper()
@@ -1087,6 +1179,8 @@ class Workspace:
         self.alive=False
         self.audio_generation+=1;self.audio_style_generation+=1;self.stop_audio()
         if self.audio_directory:self.audio_directory.cleanup()
+        login=getattr(self,'eleven_login_process',None)
+        if login and login.poll() is None:login.terminate()
         process=getattr(self,'mic_test_process',None)
         if process and process.poll() is None:process.terminate()
         return False
