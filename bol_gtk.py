@@ -12,7 +12,7 @@ from gi.repository import Gtk, Gdk, GLib, Gio
 from bol_features import LANGUAGES, MODES, History, audio_level, history_date, filter_history
 from bol_providers import SPEECH_PROVIDERS, WRITING_PROVIDERS, detect_whisper, validate_speech
 from bol_audio import synthesize, suggest_delivery, STYLE_PRESETS, TTS_LANGUAGES, TTS_VOICES
-from bol_themes import THEMES, is_light, overrides
+from bol_themes import THEMES, is_light, overrides, light_accents
 from bol_ui import parse_pairs, format_pairs, apply_shortcuts
 
 CSS = b'''
@@ -197,7 +197,7 @@ def theme_css(theme):
     css=CSS.decode()
     css=re.sub(r'#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b',lambda match:light_color(match[0]),css)
     css+='\n.bol button.primary, .bol button.primary label { color: white; }\n.bol button.primary:disabled, .bol button.primary:disabled label { color: #8793a4; }\n.bol .window-control { background: transparent; }\n'
-    return (css+overrides(theme)).encode()
+    return (css+overrides(theme)+light_accents()).encode()
 
 
 @lru_cache(maxsize=384)

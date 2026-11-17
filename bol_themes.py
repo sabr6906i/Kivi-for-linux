@@ -47,3 +47,45 @@ window.bol, .bol headerbar, .bol .footer {{ background: {p['bg']}; color: {p['fg
 .bol .theme-preview.selected {{ box-shadow: inset 0 0 0 2px {'#396ed8' if is_light(theme) else '#82b8ff'}; }}
 .bol .theme-preview label {{ color: {p['fg']}; font-size: 11px; font-weight: 600; }}
 '''
+
+
+def light_accents():
+    """Shared semantic colors keep every light palette equally expressive."""
+    accents = {
+        'general': ('#165dcc', '#e3edff'),
+        'providers': ('#783bce', '#eee3ff'),
+        'writing': ('#986000', '#fff0cc'),
+        'vocabulary': ('#087747', '#d6f5e7'),
+        'snippets': ('#b42a7c', '#ffe0f0'),
+        'history': ('#007b88', '#d5f4f7'),
+        'shortcuts': ('#6045c7', '#eae3ff'),
+        'text-to-audio': ('#b64b0a', '#ffe6d4'),
+        'profile': ('#087747', '#d6f5e7'),
+    }
+    css = ''
+    for name, (ink, tint) in accents.items():
+        css += f'''
+.bol .page-{name} .section-title {{ color: {ink}; }}
+.bol .nav-button.nav-{name}.selected {{ background: {tint}; background-image: none; color: {ink}; }}
+.bol .nav-button.nav-{name}.selected label {{ color: {ink}; }}
+.bol .profile-menu .well-{name} {{ background: {tint}; }}
+'''
+    return css + '''
+.bol button.primary { background: linear-gradient(to bottom, #287af0, #165dcc); color: white; }
+.bol button.primary:hover { background: #165dcc; }
+.bol button.primary:disabled { background: #e2e7ee; background-image: none; color: #647080; box-shadow: none; }
+.bol .profile-avatar { background: #d6f5e7; color: #087747; }
+.bol .brand { color: #087747; }
+.bol .filter:checked { background: #e3edff; background-image: none; color: #165dcc; }
+.bol button.filter:checked label { color: #165dcc; }
+.bol .tag-dictation, .bol .saving-on, .bol .copy-action { background: #d6f5e7; color: #087747; }
+.bol .tag-edit { background: #eee3ff; color: #783bce; }
+.bol .tag-unsaved, .bol .saving-off, .bol .memory-action { background: #fff0cc; color: #986000; }
+.bol .export-action { background: #d5f4f7; color: #007b88; }
+.bol .copy-action:hover { background: #bcebd6; }
+.bol .export-action:hover { background: #bae9ef; }
+.bol .memory-action:hover { background: #ffe4a0; }
+.bol .date-heading { color: #007b88; }
+.bol .status { color: #165dcc; }
+.bol .key { background: #eae3ff; color: #6045c7; }
+'''
