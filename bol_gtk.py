@@ -1,6 +1,8 @@
 """Native GTK 4 settings workspace for Bol."""
 import json
 import threading
+import re
+import colorsys
 from functools import lru_cache
 from pathlib import Path
 import gi
@@ -146,9 +148,9 @@ window.bol  { background: #090909; color: #ececec; font-family: 'Noto Sans', san
 .bol scrollbar.vertical slider { min-width: 4px; min-height: 30px; background: #454b48; border: 0; margin: 0; border-radius: 3px; }
 .bol scrollbar.vertical:hover slider { background: #74867b; min-width: 5px; }
 .bol .window-control { min-width: 28px; min-height: 28px; padding: 2px; border: 0; border-radius: 8px; background: transparent; box-shadow: none; }
-.bol .window-control.minimize-control:hover { background: #3d301b; }
-.bol .window-control.hide-control:hover { background: #17333a; }
-.bol .window-control.close-control:hover { background: #45202b; }
+.bol .window-control.minimize-control:hover { background: #272727; }
+.bol .window-control.hide-control:hover { background: #272727; }
+.bol .window-control.close-control:hover { background: #303030; }
 .bol scrollbar slider  { background: #515151; min-width: 5px; border-radius: 4px; }
 '''
 
@@ -170,16 +172,47 @@ PAGES = [
 ICON_DIR = Path(__file__).resolve().parent / 'icons'
 
 
-@lru_cache(maxsize=48)
-def icon_paintable(name, size):
-    file = Gio.File.new_for_path(str(ICON_DIR / (name + '.svg')))
-    return Gtk.IconPaintable.new_for_file(file, size, 1)
+ICON_THEME='dark'
+ICON_IMAGES={}
+
+
+def light_color(color):
+    value=color.lstrip('#')
+    if len(value)==3:value=''.join(c*2 for c in value)
+    explicit={'090909':'#f7f8fb','0c0c0c':'#eff2f7','141414':'#ffffff','191919':'#f5f7fa',
+              '242424':'#e8edf4','292929':'#dce3ed','333333':'#cbd5e2','ececec':'#19263b',
+              'e4e4e4':'#26354a','929292':'#5e6e84','999999':'#627187','858585':'#69788c'}
+    if value.lower() in explicit:return explicit[value.lower()]
+    r,g,b=[int(value[index:index+2],16)/255 for index in (0,2,4)]
+    hue,lum,sat=colorsys.rgb_to_hls(r,g,b)
+    if sat<.15:
+        return '#edf1f6' if lum<.15 else '#ced7e3' if lum<.45 else '#607087' if lum<.7 else '#1d2b40'
+    rgb=colorsys.hls_to_rgb(hue,.94 if lum<.35 else .34,min(sat,.8))
+    return '#'+''.join(f'{round(channel*255):02x}' for channel in rgb)
+
+
+def theme_css(theme):
+    if theme!='light':return CSS
+    css=CSS.decode()
+    css=re.sub(r'#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b',lambda match:light_color(match[0]),css)
+    css+='\n.bol button.primary, .bol button.primary label { color: white; }\n.bol button.primary:disabled, .bol button.primary:disabled label { color: #8793a4; }\n.bol .window-control { background: transparent; }\n'
+    return css.encode()
+
+
+@lru_cache(maxsize=96)
+def cached_icon(name,size,theme):
+    path=ICON_DIR/(name+'-light.svg') if theme=='light' else ICON_DIR/(name+'.svg')
+    if not path.exists():path=ICON_DIR/(name+'.svg')
+    return Gtk.IconPaintable.new_for_file(Gio.File.new_for_path(str(path)),size,1)
+
+
+def icon_paintable(name,size):
+    return cached_icon(name,size,ICON_THEME)
 
 
 def svg_icon(name, size=18):
-    paintable = icon_paintable(name, size)
-    image = Gtk.Image.new_from_paintable(paintable)
-    image.set_pixel_size(size)
+    image=Gtk.Image.new_from_paintable(icon_paintable(name,size));image.set_pixel_size(size)
+    ICON_IMAGES[image]=(name,size)
     return image
 
 
@@ -253,7 +286,9 @@ class Workspace:
     def activate(self,app):
         if hasattr(self,'window') and self.alive:
             self.window.present();return
-        provider=Gtk.CssProvider(); provider.load_from_data(CSS)
+        global ICON_THEME
+        ICON_THEME=self.settings.get('theme','dark')
+        provider=Gtk.CssProvider();self.theme_provider=provider;provider.load_from_data(theme_css(ICON_THEME))
         Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(),provider,Gtk.STYLE_PROVIDER_PRIORITY_USER + 1)
         self.window=Gtk.ApplicationWindow(application=app,title='Bol')
         self.window.add_css_class('bol'); self.window.set_default_size(1120,800)
@@ -587,6 +622,13 @@ class Workspace:
             dialog.destroy()
         chooser.connect('response',response);chooser.show()
 
+    def preview_theme(self,*args):
+        global ICON_THEME
+        ICON_THEME=self.choices['theme'][self.widgets['theme'].get_selected()]
+        self.theme_provider.load_from_data(theme_css(ICON_THEME))
+        for image,(name,size) in list(ICON_IMAGES.items()):image.set_from_paintable(icon_paintable(name,size))
+        if hasattr(self,'history_search'):self.history_search.set_icon_from_paintable(Gtk.EntryIconPosition.PRIMARY,icon_paintable('search',16))
+
     def update_profile_identity(self):
         name=(self.settings.get('profile_name') or 'Your workspace').strip()
         self.profile_title.set_text(name)
@@ -599,6 +641,8 @@ class Workspace:
         self.entry(group,'profile_name','Display name','How Bol labels your workspace.').set_placeholder_text('Your name')
         self.widgets['profile_name'].set_max_length(80)
         group=self.section(page,'Workspace preferences')
+        self.choice(group,'theme','Appearance','Preview the black or white version of Bol.',['dark','light'],{'dark':'Black','light':'White'})
+        self.widgets['theme'].connect('notify::selected',self.preview_theme)
         self.choice(group,'start_page','Open Bol to','Choose your default workspace.',['History','Text to Audio'],{})
         self.toggle(group,'show_advanced','Expand advanced connections','Show provider URLs, keys, and model paths when opening Connections.')
         group=self.section(page,'Setup')
@@ -1177,6 +1221,7 @@ class Workspace:
 
     def on_close(self,*args):
         self.alive=False
+        ICON_IMAGES.clear()
         self.audio_generation+=1;self.audio_style_generation+=1;self.stop_audio()
         if self.audio_directory:self.audio_directory.cleanup()
         login=getattr(self,'eleven_login_process',None)
