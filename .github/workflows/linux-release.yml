@@ -53,7 +53,9 @@ jobs:
         run: python3 -m unittest discover -s tests -q
       - name: Build, inspect and install RPM
         run: |
-          export SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)
+          export SOURCE_DATE_EPOCH
           python3 scripts/build-rpm.py --version 0.1.0 --release 0.1.alpha1 --output dist
           rpm -qip dist/*.rpm
           rpm -qlp dist/*.rpm
