@@ -99,13 +99,25 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         raise RuntimeError('API endpoint redirected. Enter the final API endpoint URL directly.')
 
 
+def open_api(request, timeout=90):
+    """Never forward API credentials or request bodies through redirects."""
+    return urllib.request.build_opener(NoRedirect()).open(request, timeout=timeout)
+
+
+def read_json(response, limit=1048576):
+    raw = response.read(limit + 1)
+    if len(raw) > limit:
+        raise RuntimeError('API response exceeded the allowed size.')
+    return json.loads(raw)
+
+
 def request_json(url,key,body,content_type):
     url=api_endpoint(url)
     headers={'Content-Type':content_type}
     if key:headers['Authorization']='Bearer '+key
     req=urllib.request.Request(url,data=body,headers=headers)
     try:
-        with urllib.request.build_opener(NoRedirect()).open(req,timeout=90) as response:return json.load(response)
+        with open_api(req,timeout=90) as response:return read_json(response)
     except urllib.error.HTTPError as error:
         raise RuntimeError(f'Configured API returned HTTP {error.code}. Check endpoint, model, key and credits.') from None
 

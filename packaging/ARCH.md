@@ -3,15 +3,15 @@
 Build a native package using an explicit committed snapshot:
 
 ```sh
-./scripts/build-arch.sh --version 0.1.0alpha1 --tag v0.1.0-alpha.1 --ref HEAD --output dist/arch
+./scripts/build-arch.sh --version 0.1.0alpha2 --tag v0.1.0-alpha.2 --ref HEAD --output dist/arch
 ```
 
 The build requires `makepkg` and the dependencies declared in the generated `PKGBUILD`. The script never installs dependencies, uses sudo, publishes, or changes the current desktop. Commit the intended release files before building: the source archive uses `git archive`, so uncommitted edits, local configuration, API keys, account sessions, and untracked files are excluded.
 
 Artifacts include:
 
-- `bol-linux-0.1.0alpha1-1-any.pkg.tar.zst`: the installable Arch package.
-- `bol-linux-0.1.0alpha1.tar.gz`: source archive, published alongside the binary package.
+- `bol-linux-0.1.0alpha2-1-any.pkg.tar.zst`: the installable Arch package.
+- `bol-linux-0.1.0alpha2.tar.gz`: source archive, published alongside the binary package.
 - `PKGBUILD` and `.SRCINFO`: a materialized source recipe with the archive's real SHA-256 digest.
 - `SHA256SUMS` and `SOURCE_COMMIT`: integrity checks and the exact source revision.
 
@@ -20,7 +20,7 @@ The recipe's source URL points to the corresponding GitHub Release source **asse
 Install the built package using pacman:
 
 ```sh
-sudo pacman -U ./dist/arch/bol-linux-0.1.0alpha1-1-any.pkg.tar.zst
+sudo pacman -U ./dist/arch/bol-linux-0.1.0alpha2-1-any.pkg.tar.zst
 /usr/bin/bol settings
 /usr/bin/bol doctor
 ```

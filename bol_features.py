@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import re
 import sqlite3
+from bol_providers import open_api, read_json
 import urllib.request
 import urllib.error
 
@@ -78,8 +79,8 @@ def write(text, settings, app='', selection='', editing=False):
     request = urllib.request.Request('https://api.sarvam.ai/v1/chat/completions', data=body,
         headers={'api-subscription-key': settings['api_key'], 'Content-Type': 'application/json'})
     try:
-        with urllib.request.urlopen(request, timeout=90) as response:
-            result = json.load(response)
+        with open_api(request, timeout=90) as response:
+            result = read_json(response)
     except urllib.error.HTTPError as error:
         raise RuntimeError(f'Writing API returned HTTP {error.code}. Check chat-model access and credits.') from None
     message = result.get('choices', [{}])[0].get('message', {}).get('content')
@@ -110,6 +111,7 @@ class History:
     def connect(self):
         db = sqlite3.connect(self.path, timeout=5)
         try:
+            db.execute('PRAGMA secure_delete=ON')
             with db:
                 yield db
         finally:

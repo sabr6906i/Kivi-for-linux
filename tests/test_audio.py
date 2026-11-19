@@ -19,7 +19,7 @@ class AudioTests(unittest.TestCase):
         response.read.return_value=json.dumps(value).encode();return response
 
     def test_request_and_wav_decoding(self):
-        with patch('urllib.request.urlopen',return_value=self.response({'audios':[base64.b64encode(clip()).decode()]})) as call:
+        with patch('bol_audio.open_api',return_value=self.response({'audios':[base64.b64encode(clip()).decode()]})) as call:
             result=synthesize('ਸਤਿ ਸ੍ਰੀ ਅਕਾਲ','private-key','pa-IN','simran',1.2)
         payload=json.loads(call.call_args.args[0].data)
         self.assertEqual(payload['model'],'bulbul:v3');self.assertEqual(payload['language_code'],'pa-IN');self.assertEqual(payload['pace'],1.2)
@@ -28,18 +28,18 @@ class AudioTests(unittest.TestCase):
 
     def test_multiple_wav_segments_are_joined_without_extra_headers(self):
         encoded=base64.b64encode(clip()).decode()
-        with patch('urllib.request.urlopen',return_value=self.response({'audios':[encoded,encoded]})):
+        with patch('bol_audio.open_api',return_value=self.response({'audios':[encoded,encoded]})):
             result=synthesize('A sample','key')
         with wave.open(io.BytesIO(result),'rb') as audio:self.assertEqual(audio.getnframes(),4800)
 
     def test_invalid_requests_do_not_call_api(self):
-        with patch('urllib.request.urlopen') as network:
+        with patch('bol_audio.open_api') as network:
             for text,key in [('', 'key'),('x'*2501,'key'),('hello','')]:
                 with self.assertRaises(ValueError):synthesize(text,key)
             network.assert_not_called()
 
     def test_invalid_audio_is_reported(self):
-        with patch('urllib.request.urlopen',return_value=self.response({'audios':['not base64']})):
+        with patch('bol_audio.open_api',return_value=self.response({'audios':['not base64']})):
             with self.assertRaisesRegex(RuntimeError,'invalid WAV'):synthesize('hello','key')
 
 class DeliveryStyleTests(unittest.TestCase):
@@ -50,7 +50,7 @@ class DeliveryStyleTests(unittest.TestCase):
 
     def test_instructions_choose_controls_not_script(self):
         from bol_audio import suggest_delivery
-        with patch('urllib.request.urlopen',return_value=self.response('{"voice":"roopa","pace":0.85,"temperature":0.4}')) as network:
+        with patch('bol_audio.open_api',return_value=self.response('{"voice":"roopa","pace":0.85,"temperature":0.4}')) as network:
             plan=suggest_delivery('Warm and soothing, a little slower',{'api_key':'secret'},'pa-IN')
         self.assertEqual(plan['voice'],'roopa')
         payload=json.loads(network.call_args.args[0].data)
@@ -64,7 +64,7 @@ class DeliveryStyleTests(unittest.TestCase):
     def test_invalid_suggestions_are_rejected(self):
         from bol_audio import suggest_delivery
         for content in ['{"voice":"invented","pace":1,"temperature":0.6}', '{"voice":"roopa","pace":8,"temperature":0.6}', '{"voice":"roopa","pace":1,"temperature":2}', 'Not JSON']:
-            with patch('urllib.request.urlopen',return_value=self.response(content)):
+            with patch('bol_audio.open_api',return_value=self.response(content)):
                 with self.assertRaisesRegex(RuntimeError,'invalid style'):suggest_delivery('Calm',{'api_key':'secret'})
 
     def test_all_presets_use_supported_controls(self):

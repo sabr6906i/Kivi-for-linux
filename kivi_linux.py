@@ -16,6 +16,7 @@ import sys
 import tempfile
 import threading
 import time
+from bol_providers import open_api, read_json
 import urllib.request
 import urllib.error
 import uuid
@@ -76,8 +77,8 @@ def transcribe_one(path, settings):
     request = urllib.request.Request('https://api.sarvam.ai/speech-to-text', data=body,
         headers={'api-subscription-key': settings['api_key'], 'Content-Type': f'multipart/form-data; boundary={boundary}'})
     try:
-        with urllib.request.urlopen(request, timeout=60) as response:
-            result = json.load(response)
+        with open_api(request, timeout=60) as response:
+            result = read_json(response)
     except urllib.error.HTTPError as error:
         raise RuntimeError(f'Sarvam returned HTTP {error.code}. Check your API key, credits and connection.') from None
     text = result.get('transcript', '').strip()
@@ -372,7 +373,8 @@ class Service:
             notify(self.error)
             return
         same_window = same_window and active_window().get('address') == target
-        if settings.get('auto_paste', True) and same_window and selection_unchanged:
+        unsafe_terminal_text = terminal and any(ord(char) < 32 or ord(char) == 127 for char in text)
+        if settings.get('auto_paste', True) and same_window and selection_unchanged and not unsafe_terminal_text:
             # Electron editors and terminals often use different paste shortcuts.
             terminal = any(name in app.casefold() for name in ['kitty', 'alacritty', 'foot', 'wezterm', 'konsole', 'terminal'])
             if mode == 'edit' and selection:
@@ -381,7 +383,7 @@ class Service:
             shortcut('V', 'CTRL SHIFT' if terminal else 'CTRL')
             self.outcome = 'Paste shortcut sent'
         else:
-            self.outcome = 'Copied — paste into your app' if not target else 'Copied — paste manually (focus or selection changed)' if not same_window or not selection_unchanged else 'Copied'
+            self.outcome = 'Copied — review multiline or control-character text before pasting into a terminal' if unsafe_terminal_text else 'Copied — paste into your app' if not target else 'Copied — paste manually (focus or selection changed)' if not same_window or not selection_unchanged else 'Copied'
         self.state, self.error = 'Ready', warning
         notify(warning or self.outcome)
 
@@ -410,9 +412,24 @@ def request(command, start=True):
         raise RuntimeError('Could not start Bol background service.')
 
 
+def secure_runtime():
+    """Reject pre-created/symlinked runtime paths before touching lock/socket files."""
+    import stat
+    if not os.environ.get('XDG_RUNTIME_DIR'):
+        parent = RUNTIME.parent
+        parent.mkdir(mode=0o700, exist_ok=True)
+        info = parent.lstat()
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
+            raise RuntimeError('Unsafe Bol runtime parent directory.')
+    RUNTIME.mkdir(mode=0o700, exist_ok=True)
+    info = RUNTIME.lstat()
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
+        raise RuntimeError('Unsafe Bol runtime directory.')
+
+
 def daemon():
     import fcntl
-    RUNTIME.mkdir(parents=True, exist_ok=True, mode=0o700)
+    secure_runtime()
     with (RUNTIME / 'daemon.lock').open('w') as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -445,7 +462,10 @@ def daemon():
                             result = service.command(json.loads(message) if message.startswith('{') else message)
                         except Exception as error:
                             result = {'error': str(error)}
-                        client.sendall(json.dumps(result).encode())
+                        try:
+                            client.sendall(json.dumps(result).encode())
+                        except (BrokenPipeError, ConnectionResetError, TimeoutError):
+                            pass  # A disconnected client must not terminate the daemon.
             finally:
                 service.cancel(silent=True)
                 indicator.terminate()

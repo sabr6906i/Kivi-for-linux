@@ -26,7 +26,7 @@ The app is an early implementation of these workflows, not a claim of complete K
 
 ## Native Linux packages
 
-Download the `.pkg.tar.zst` (Arch), `.deb` (Ubuntu/Debian), or `.noarch.rpm` (Fedora) from [GitHub Releases](https://github.com/sabr6906i/Kivi-for-linux/releases). The first preview is `v0.1.0-alpha.1`.
+Download the `.pkg.tar.zst` (Arch), `.deb` (Ubuntu/Debian), or `.noarch.rpm` (Fedora) from [GitHub Releases](https://github.com/sabr6906i/Kivi-for-linux/releases). The current preview is `v0.1.0-alpha.2`, including offline model downloads and security hardening.
 
 See [package installation/build instructions](docs/PACKAGES.md), [Arch release instructions](packaging/ARCH.md), and the [desktop support matrix](docs/DESKTOPS.md). GNOME/KDE Wayland use clipboard delivery with explicit GTK Copy and copy-first voice editing; Hyprland retains automatic insertion. The package pipeline runs Xvfb smoke checks; separate real nested GNOME Shell/KWin checks also pass. These do not certify physical microphone use, global shortcuts, cross-app clipboard, or full desktop sessions. Flatpak is an [investigation](packaging/flatpak/README.md), not a released sandbox package.
 
@@ -178,3 +178,9 @@ bash -n install.sh
 Remove the Bol bindings from your Hyprland config and reload. Stop the Bol daemon, then delete `~/.local/bin/bol`, `~/.local/share/bol-linux`, and `~/.local/share/applications/bol-linux.desktop`. Optionally remove `~/.config/bol-linux` including settings and history.
 
 See [ROADMAP.md](ROADMAP.md) for the next development milestones and their completion criteria.
+
+### Download free offline speech models
+
+Open **Profile & settings → Connections → Free offline speech models** to download multilingual Whisper Tiny (78 MB), Base (148 MB), or Small (488 MB). Downloads are optional, show progress, and can be cancelled. After verification, click **Save changes** to use the selected local model. A working `whisper-cli` executable is required; Bol detects an existing installation or accepts its path in Advanced provider settings.
+
+These are OpenAI Whisper weights converted to GGML by the whisper.cpp project, hosted on Hugging Face. Bol pins the source revision, exact file size and SHA-256 digest, uses HTTPS, and installs only fully verified downloads. Partial or failed downloads are removed. Models live in `$XDG_DATA_HOME/bol-linux/models` (normally `~/.local/share/bol-linux/models`). No account or API key is required for local transcription; AI writing remains a separate, opt-in provider connection. These models recognize speech, not generate audio. CPU performance and language accuracy vary.

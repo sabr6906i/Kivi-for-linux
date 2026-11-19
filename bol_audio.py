@@ -2,6 +2,7 @@
 import base64
 import io
 import json
+from bol_providers import open_api, read_json
 import urllib.request
 import urllib.error
 import wave
@@ -22,7 +23,7 @@ def synthesize(text,key,language='en-IN',voice='shubh',pace=1.0,temperature=.6):
     payload={'temperature':float(temperature),'text':text,'language_code':language,'speaker':voice,'model':'bulbul:v3','pace':float(pace),'speech_sample_rate':24000,'output_audio_codec':'wav'}
     request=urllib.request.Request('https://api.sarvam.ai/text-to-speech',data=json.dumps(payload,ensure_ascii=False).encode(),headers={'api-subscription-key':key,'Content-Type':'application/json'})
     try:
-        with urllib.request.urlopen(request,timeout=90) as response:result=json.load(response)
+        with open_api(request,timeout=90) as response:result=read_json(response, limit=32 * 1024 * 1024)
     except urllib.error.HTTPError as error:
         raise RuntimeError(f'Speech generation returned HTTP {error.code}. Check key, credits and voice access.') from None
     audios=result.get('audios')
@@ -82,7 +83,7 @@ def suggest_delivery(instructions,settings,language='en-IN'):
         payload['response_format']={'type':'json_object'}
         request=urllib.request.Request('https://api.sarvam.ai/v1/chat/completions',data=json.dumps(payload).encode(),headers={'api-subscription-key':settings['api_key'],'Content-Type':'application/json'})
         try:
-            with urllib.request.urlopen(request,timeout=60) as response:result=json.load(response)
+            with open_api(request,timeout=60) as response:result=read_json(response)
         except urllib.error.HTTPError as error:raise RuntimeError(f'Style suggestion returned HTTP {error.code}. Check writing-model access and credits.') from None
     if result.get('choices',[{}])[0].get('finish_reason')=='length':
         raise RuntimeError('The writing response was truncated. Try a preset or a writing model with a larger output budget.')

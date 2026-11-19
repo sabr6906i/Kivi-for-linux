@@ -2,8 +2,8 @@
 # Build only from an explicit git snapshot: no keys, sessions or untracked files.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
-version=0.1.0alpha1
-tag=v0.1.0-alpha.1
+version=0.1.0alpha2
+tag=v0.1.0-alpha.2
 source_ref=HEAD
 output_dir="$repo_root/dist/arch"
 usage() {

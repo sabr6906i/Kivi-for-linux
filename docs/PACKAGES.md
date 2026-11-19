@@ -10,15 +10,15 @@ Build using Python 3.10+; root and Debian tools are not needed:
 
 ```sh
 SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)" \
-  python3 scripts/build-deb.py --version '0.1.0~alpha1' --output dist
+  python3 scripts/build-deb.py --version '0.1.0~alpha2' --output dist
 ```
 
-The result is `dist/bol-linux_0.1.0.alpha1_all.deb`. Its architecture is `all` because it ships Python source rather than native binaries. Debian prerequisites are declared in the package, including GTK4/PyGObject, PipeWire tools, wl-clipboard, notifications, and ffmpeg.
+The result is `dist/bol-linux_0.1.0.alpha2_all.deb`. Its architecture is `all` because it ships Python source rather than native binaries. Debian prerequisites are declared in the package, including GTK4/PyGObject, PipeWire tools, wl-clipboard, notifications, and ffmpeg.
 
 Install on a Debian/Ubuntu machine with a graphical user session:
 
 ```sh
-sudo apt install ./bol-linux_0.1.0.alpha1_all.deb
+sudo apt install ./bol-linux_0.1.0.alpha2_all.deb
 bol settings
 ```
 
@@ -27,8 +27,8 @@ bol settings
 Inspect without installing:
 
 ```sh
-dpkg-deb --info dist/bol-linux_0.1.0.alpha1_all.deb
-dpkg-deb --contents dist/bol-linux_0.1.0.alpha1_all.deb
+dpkg-deb --info dist/bol-linux_0.1.0.alpha2_all.deb
+dpkg-deb --contents dist/bol-linux_0.1.0.alpha2_all.deb
 ```
 
 On a non-Debian build host, `ar t package.deb` and `ar p package.deb data.tar.gz | tar -tzf -` inspect the same archive. The builder includes deterministic gzip/tar/ar metadata and a `md5sums` control member. Use the same `SOURCE_DATE_EPOCH` and source tree for reproducible artifacts.
@@ -40,7 +40,7 @@ On a non-Debian build host, `ar t package.deb` and `ar p package.deb data.tar.gz
 ```sh
 dnf install -y rpm-build python3
 SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)" \
-  python3 scripts/build-rpm.py --version 0.1.0 --release 0.1.alpha1 --output dist
+  python3 scripts/build-rpm.py --version 0.1.0 --release 0.1.alpha2 --output dist
 rpm -qip dist/bol-linux-*.noarch.rpm
 rpm -qlp dist/bol-linux-*.noarch.rpm
 ```
@@ -58,12 +58,12 @@ No package script runs the application as root, enables a system daemon, edits a
 
 ## Release checks
 
-Build public artifacts from a clean checkout of the release tag, not a development tree containing uncommitted user changes. The prerelease tag `v0.1.0-alpha.1` maps to Debian version `0.1.0~alpha1`, RPM version/release `0.1.0-0.1.alpha1`, and an Arch prerelease version. Debian's tilde and RPM's `0.` release prefix ensure the later `0.1.0` stable release upgrades normally.
+Build public artifacts from a clean checkout of the release tag, not a development tree containing uncommitted user changes. The prerelease tag `v0.1.0-alpha.2` maps to Debian version `0.1.0~alpha2`, RPM version/release `0.1.0-0.1.alpha2`, and an Arch prerelease version. Debian's tilde and RPM's `0.` release prefix ensure the later `0.1.0` stable release upgrades normally.
 
 Before claiming support, install and launch each artifact in a disposable target-distribution session. Verify microphone recording, history, provider connection, shortcuts, text insertion or documented clipboard fallback, and uninstall behavior. Archive inspection and mocked desktop tests alone are insufficient for GNOME/KDE release certification. RPM signatures and a maintained apt/dnf update repository are separate release tasks; a GitHub download does not create either.
 
 ## Automated prereleases
 
-`.github/workflows/linux-release.yml` builds on clean Ubuntu, Fedora and Arch runners. A manual workflow dispatch with `publish=false` only creates workflow artifacts. With `publish=true`, the final job publishes an explicitly labelled GitHub prerelease **only after all three build/test jobs pass**. Use tag `v0.1.0-alpha.1` for this initial preview. Native GNOME/KDE compositor support remains preview even when the Xvfb GTK checks pass.
+`.github/workflows/linux-release.yml` builds on clean Ubuntu, Fedora and Arch runners. A manual workflow dispatch with `publish=false` only creates workflow artifacts. With `publish=true`, the final job publishes an explicitly labelled GitHub prerelease **only after all three build/test jobs pass**. Use tag `v0.1.0-alpha.2` for this updated preview. Native GNOME/KDE compositor support remains preview even when the Xvfb GTK checks pass.
 
 The source snapshot is the workflow's checked-out commit. Local uncommitted edits, account sessions and provider keys do not enter release assets. All uploaded assets receive a fresh SHA-256 manifest; no signing key is configured in this version.

@@ -18,7 +18,7 @@ import tempfile
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--version', default='0.1.0')
-    parser.add_argument('--release', default='0.1.alpha1')
+    parser.add_argument('--release', default='0.1.alpha2')
     parser.add_argument('--source', type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument('--output', type=Path, default=Path('dist'))
     args = parser.parse_args()

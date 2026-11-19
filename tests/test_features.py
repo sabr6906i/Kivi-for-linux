@@ -40,7 +40,7 @@ class PersonalizationTests(unittest.TestCase):
         response.__exit__ = Mock(return_value=False)
         response.read.return_value = json.dumps({'choices':[{'message':{'content':'Rewritten'}}]}).encode()
         settings = {'api_key':'fake','profiles':{'Editor':'Use bullets'},'writing_rules':'Preserve Punjabi'}
-        with patch('urllib.request.urlopen', return_value=response) as call:
+        with patch('bol_features.open_api', return_value=response) as call:
             self.assertEqual(write('Make this shorter',settings,'Editor','Selected source',True), 'Rewritten')
         payload = json.loads(call.call_args.args[0].data)
         self.assertIn('Use bullets',payload['messages'][0]['content'])

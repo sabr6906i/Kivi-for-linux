@@ -74,12 +74,12 @@ def package_files(root):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--version', default='0.1.0~alpha1')
+    parser.add_argument('--version', default='0.1.0~alpha2')
     parser.add_argument('--source', type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument('--output', type=Path, default=Path('dist'))
     args = parser.parse_args()
     if not re.fullmatch(r'[0-9][A-Za-z0-9.+:~\-]*', args.version) or ':' in args.version:
-        parser.error('Use a Debian version without an epoch, e.g. 0.1.0~alpha1.')
+        parser.error('Use a Debian version without an epoch, e.g. 0.1.0~alpha2.')
     epoch = int(os.environ.get('SOURCE_DATE_EPOCH', '0'))
     if not 0 <= epoch <= 0xffffffff:
         parser.error('SOURCE_DATE_EPOCH must be between 0 and 4294967295.')

@@ -1074,6 +1074,15 @@ class Workspace:
         for title,action in [('Sign in with ElevenLabs','login'),('Check connection','status'),('Install sign-in helper','install'),('Disconnect ElevenLabs','logout')]:
             button=Gtk.Button(label=title);button.connect('clicked',lambda b,a=action:self.eleven_action(a));buttons.insert(button,-1);self.eleven_buttons.append(button)
         group.append(buttons)
+        from bol_models import MODELS
+        group=self.section(page,'Free offline speech models','OpenAI Whisper weights converted for whisper.cpp. No account or API key needed. Downloads come from Hugging Face; a whisper-cli installation is still required.')
+        self.model_buttons=[]
+        for name,model in MODELS.items():
+            button=Gtk.Button(label='Download');button.connect('clicked',lambda b,n=name:self.download_local_model(n));self.model_buttons.append(button)
+            self.row(group,model['title'],model['hint'],button)
+        self.model_progress=Gtk.ProgressBar();margins(self.model_progress,12);group.append(self.model_progress)
+        self.model_status=label('Choose a model to download. No download starts automatically.','muted',True);margins(self.model_status,12);group.append(self.model_status)
+        self.model_cancel=Gtk.Button(label='Cancel download');self.model_cancel.set_sensitive(False);self.model_cancel.connect('clicked',lambda b:self.model_download_cancel.set());margins(self.model_cancel,12);group.append(self.model_cancel)
         advanced=Gtk.Expander(label='Advanced provider settings');self.connection_details=advanced;advanced.set_expanded(self.settings.get('show_advanced',False));page.append(advanced)
         details=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=18);details.set_margin_top(18);advanced.set_child(details);page=details
         group=self.section(page,'Sarvam credentials','Used for Sarvam speech recognition and Sarvam AI writing.')
@@ -1103,6 +1112,44 @@ class Workspace:
         self.provider_sections['writing_api']=group.get_parent()
         group=self.section(page,'Local speech privacy')
         self.toggle(group,'local_speech_writing','AI writing with local speech','Allows local Whisper text to reach the chosen writing endpoint. Off keeps local dictation offline.')
+
+    def download_local_model(self,name):
+        from bol_models import download_model
+        self.model_download_cancel=threading.Event()
+        for button in self.model_buttons:button.set_sensitive(False)
+        self.model_cancel.set_sensitive(True);self.model_progress.set_fraction(0)
+        self.model_status.set_text('Downloading model…')
+        def update(done,total):
+            if self.alive:
+                self.model_progress.set_fraction(done/total)
+                self.model_status.set_text(f'Downloading — {done/1000000:.1f} / {total/1000000:.1f} MB')
+            return False
+        def finished(path,error):
+            if not self.alive:return False
+            for button in self.model_buttons:button.set_sensitive(True)
+            self.model_cancel.set_sensitive(False)
+            if error:self.model_status.set_text(error)
+            else:
+                self.model_progress.set_fraction(1)
+                self.widgets['whisper_model'].set_text(str(path))
+                binary,_=detect_whisper()
+                if binary and not self.widgets['whisper_binary'].get_text().strip():self.widgets['whisper_binary'].set_text(binary)
+                self.widgets['speech_provider'].set_selected(SPEECH_PROVIDERS.index('whispercpp'))
+                self.update_provider_sections()
+                self.save_button.set_sensitive(True)
+                self.model_status.set_text('Verified and selected. Save changes to use this offline model.' if binary or self.widgets['whisper_binary'].get_text().strip() else 'Model verified. Set your whisper-cli executable in Advanced provider settings, then save.')
+            return False
+        def worker():
+            import time
+            last=[0.0]
+            def progress(done,total):
+                now=time.monotonic()
+                if now-last[0]>.15 or done==total:
+                    last[0]=now;GLib.idle_add(update,done,total)
+            try:path=download_model(name,lambda:self.model_download_cancel.is_set() or not self.alive,progress);error=None
+            except Exception as exc:path=None;error='Download cancelled.' if self.model_download_cancel.is_set() else 'Download failed. Check your connection and free disk space; no unverified model was selected.'
+            GLib.idle_add(finished,path,error)
+        threading.Thread(target=worker,daemon=True).start()
 
     def update_provider_sections(self):
         if not hasattr(self,'provider_sections') or 'writing_provider' not in self.widgets:return
