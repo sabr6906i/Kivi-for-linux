@@ -6,3 +6,5 @@ settings.json
 *.pem
 *.sqlite3
 *.sqlite3-*
+
+account-session.json

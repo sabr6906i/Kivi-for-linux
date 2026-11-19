@@ -13,6 +13,7 @@ from bol_features import LANGUAGES, MODES, History, audio_level, history_date, f
 from bol_providers import SPEECH_PROVIDERS, WRITING_PROVIDERS, detect_whisper, validate_speech
 from bol_audio import synthesize, suggest_delivery, STYLE_PRESETS, TTS_LANGUAGES, TTS_VOICES
 from bol_themes import THEMES, is_light, overrides, light_accents
+from bol_accounts import AccountClient, SYNC_KEYS
 from bol_ui import parse_pairs, format_pairs, apply_shortcuts
 
 CSS = b'''
@@ -328,7 +329,7 @@ class Workspace:
         self.profile_menu_avatar=label('B','profile-avatar');self.profile_menu_avatar.set_xalign(.5);self.profile_menu_avatar.set_size_request(40,40);menu_identity.append(self.profile_menu_avatar)
         menu_identity_text=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=4);menu_identity_text.set_hexpand(True)
         self.profile_menu_name=label('Your workspace','profile-name');self.profile_menu_name.set_ellipsize(3);self.profile_menu_name.set_max_width_chars(24);menu_identity_text.append(self.profile_menu_name)
-        menu_identity_text.append(label('Local profile · on this device','profile-caption'));menu_identity.append(menu_identity_text);profile_menu.append(menu_identity)
+        self.profile_account_caption=label('Local workspace','profile-caption');self.profile_account_caption.set_ellipsize(3);self.profile_account_caption.set_max_width_chars(26);menu_identity_text.append(self.profile_account_caption);menu_identity.append(menu_identity_text);profile_menu.append(menu_identity)
         profile_menu.append(Gtk.Separator())
         for title,icon_name,description in PAGES:
             button=Gtk.Button();button.add_css_class('nav-button');button.add_css_class('nav-'+title.lower().replace(' ','-'));button.set_margin_start(10);button.set_margin_end(10)
@@ -654,7 +655,8 @@ class Workspace:
 
     def build_profile(self):
         page=self.pages['Profile']
-        group=self.section(page,'Your profile','This profile lives on this computer. It is not a cloud account or a Sarvam sign-in.')
+        self.build_account_section(page)
+        group=self.section(page,'Your profile','Your display name is local unless you upload your preferences to your Bol account.')
         self.entry(group,'profile_name','Display name','How Bol labels your workspace.').set_placeholder_text('Your name')
         self.widgets['profile_name'].set_max_length(80)
         group=self.section(page,'Appearance','Choose a palette to preview it immediately. Save changes to keep it.')
@@ -681,7 +683,151 @@ class Workspace:
         self.toggle(group,'show_advanced','Expand advanced connections','Show provider URLs, keys, and model paths when opening Connections.')
         group=self.section(page,'Setup')
         setup=Gtk.Button(label='Open setup assistant');setup.connect('clicked',lambda b:self.show_setup());self.row(group,'Speech setup','Connect a cloud service or choose local Whisper.',setup)
-        page.append(label('Your existing history, vocabulary, snippets, providers, and writing preferences are shared by this local workspace. There is no account synchronization yet.','muted',True))
+        page.append(label('Signing in does not switch or isolate local workspaces. Cloud sync is manual; only the preferences listed above are synced. History and API keys stay on this device.','muted',True))
+
+    def build_account_section(self,page):
+        self.account_busy=False
+        group=self.section(page,'Bol account','Sign in on another device to restore your preferences. Powered by Supabase.')
+        self.account_identity=label('','row-title',True);self.account_identity.set_hexpand(True)
+        self.account_signin=action_button('Sign in','profile');self.account_signin.connect('clicked',lambda b:self.show_account_signin())
+        identity=Gtk.Box(spacing=12);margins(identity,16);identity.append(self.account_identity);identity.append(self.account_signin);group.append(identity)
+        self.account_note=label('','muted',True);margins(self.account_note,16);group.append(self.account_note)
+        controls=Gtk.Box(spacing=8);margins(controls,16)
+        self.account_upload=action_button('Upload this device','export');self.account_upload.connect('clicked',lambda b:self.account_sync('upload'));controls.append(self.account_upload)
+        self.account_restore=action_button('Restore from cloud','refresh');self.account_restore.connect('clicked',lambda b:self.account_sync('restore'));controls.append(self.account_restore)
+        self.account_signout=Gtk.Button(label='Sign out');self.account_signout.connect('clicked',lambda b:self.account_logout());controls.append(self.account_signout);group.append(controls)
+        description=label('Sync includes your display name, theme, language, writing rules, vocabulary, corrections, snippets, and edit-review preference. API keys, history, audio, shortcuts, and model paths stay here.','muted',True);margins(description,16);group.append(description)
+        setup=Gtk.Expander(label='Cloud project setup');margins(setup,16)
+        box=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=10)
+        box.append(label('For the app owner: connect a Supabase project after running the database migration. Use a publishable key; never an admin key.','muted',True))
+        self.account_url=Gtk.Entry();self.account_url.set_placeholder_text('https://your-project.supabase.co');self.account_url.set_text(self.settings.get('supabase_url',''));box.append(self.account_url)
+        self.account_key=Gtk.Entry();self.account_key.set_placeholder_text('sb_publishable_…');self.account_key.set_text(self.settings.get('supabase_publishable_key',''));box.append(self.account_key)
+        self.account_setup_save=Gtk.Button(label='Save cloud connection');self.account_setup_save.connect('clicked',lambda b:self.action(self.save_account_project));box.append(self.account_setup_save)
+        setup.set_child(box);group.append(setup)
+        self.update_account_section()
+
+    def account_client(self):
+        return AccountClient(self.core.CONFIG,self.core.config())
+
+    def update_account_section(self,message=None):
+        client=self.account_client();signed=client.signed_in
+        self.profile_account_caption.set_text(client.session.get('user',{}).get('email','Bol account') if signed else 'Local workspace · not signed in')
+        self.account_identity.set_text(client.session.get('user',{}).get('email','Signed in') if signed else 'Local workspace · not signed in')
+        note='Last sync: '+client.session['last_sync'] if signed and client.session.get('last_sync') else 'Your local preferences have not been synced.'
+        if not client.url or not client.key:note='Cloud project is not configured. Open Cloud project setup below.'
+        self.account_note.set_text(message or note)
+        for button in (self.account_upload,self.account_restore,self.account_signout):button.set_sensitive(signed and not self.account_busy)
+        self.account_signin.set_visible(not signed);self.account_signin.set_sensitive(not self.account_busy)
+        self.account_setup_save.set_sensitive(not self.account_busy)
+        self.account_url.set_sensitive(not self.account_busy);self.account_key.set_sensitive(not self.account_busy)
+
+    def save_account_project(self):
+        data=self.core.config();data.update({'supabase_url':self.account_url.get_text().strip().rstrip('/'),'supabase_publishable_key':self.account_key.get_text().strip()})
+        client=AccountClient(self.core.CONFIG,data);client.validate_project();self.core.save_config(data)
+        self.settings.update({key:data[key] for key in ('supabase_url','supabase_publishable_key')})
+        self.update_account_section('Cloud connection saved. You can now sign in with your email.')
+
+    def account_job(self,work,done):
+        if self.account_busy:return
+        self.account_busy=True;self.update_account_section('Connecting…')
+        def finish(result,error):
+            if not self.alive:return False
+            self.account_busy=False
+            self.update_account_section()
+            if error:self.dialog('Account',str(error))
+            else:
+                try:done(result)
+                except Exception as caught:self.dialog('Account',str(caught))
+            return False
+        def worker():
+            try:result=work();error=None
+            except Exception as caught:result=None;error=caught
+            GLib.idle_add(finish,result,error)
+        threading.Thread(target=worker,daemon=True).start()
+
+    def show_account_signin(self):
+        try:self.account_client().validate_project()
+        except Exception as error:self.dialog('Connect your cloud project',str(error));return
+        dialog=Gtk.Window(title='Sign in to Bol',transient_for=self.window,modal=True);dialog.add_css_class('bol');dialog.set_default_size(450,340)
+        box=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=14);margins(box,26);dialog.set_child(box)
+        box.append(label('Your Bol account','page-title'));box.append(label('We will email a one-time code. New email addresses create an account. No password needed.','muted',True))
+        email=Gtk.Entry();email.set_placeholder_text('you@example.com');box.append(email)
+        code=Gtk.Entry();code.set_placeholder_text('Code from your email');code.set_input_purpose(Gtk.InputPurpose.DIGITS);code.set_visible(False);box.append(code)
+        note=label('','muted',True);box.append(note)
+        send=Gtk.Button(label='Send sign-in code');send.add_css_class('primary');box.append(send)
+        verify=Gtk.Button(label='Verify and sign in');verify.add_css_class('primary');verify.set_visible(False);box.append(verify)
+        resend=Gtk.Button(label='Resend code');resend.set_visible(False);box.append(resend)
+        state={'busy':False,'alive':True}
+        def closed(*args):state['alive']=False
+        dialog.connect('close-request',closed)
+        def run(verify_code=False):
+            if state['busy']:return
+            client=self.account_client();address=email.get_text().strip();token=code.get_text().strip()
+            try:client.email(address)
+            except Exception as error:note.set_text(str(error));return
+            state['busy']=True
+            for control in (send,verify,resend,email,code):control.set_sensitive(False)
+            note.set_text('Verifying…' if verify_code else 'Sending code…')
+            def finished(result,error):
+                if not self.alive:return False
+                if state['alive']:
+                    state['busy']=False
+                    for control in (send,verify,resend,email,code):control.set_sensitive(True)
+                    if error:note.set_text(str(error))
+                    elif verify_code:dialog.close()
+                    else:
+                        code.set_visible(True);verify.set_visible(True);resend.set_visible(True);send.set_visible(False)
+                        note.set_text('Check your inbox for the code. It may take a minute.');code.grab_focus()
+                self.update_account_section('Signed in. Upload this device or restore your cloud preferences.' if not error and verify_code else None)
+                return False
+            def worker():
+                try:result=client.verify_code(address,token) if verify_code else client.send_code(address);error=None
+                except Exception as caught:result=None;error=caught
+                GLib.idle_add(finished,result,error)
+            threading.Thread(target=worker,daemon=True).start()
+        send.connect('clicked',lambda b:run());resend.connect('clicked',lambda b:run());verify.connect('clicked',lambda b:run(True));code.connect('activate',lambda e:run(True));dialog.present()
+
+    def account_logout(self):
+        client=self.account_client()
+        self.account_job(client.sign_out,lambda result:self.update_account_section('Signed out. Local preferences and provider connections are unchanged.'))
+
+    def account_sync(self,mode):
+        if self.save_button.get_sensitive():self.dialog('Save your changes first','Save your current settings before syncing your account.');return
+        client=self.account_client()
+        if mode=='upload':
+            data=self.core.config()
+            self.account_job(lambda:client.upload(data),lambda revision:self.update_account_section('Preferences uploaded. Restore them on your other device.'))
+        else:self.account_job(client.download,lambda result:self.review_cloud_restore(client,result))
+
+    def review_cloud_restore(self,client,result):
+        payload,revision=result
+        dialog=Gtk.Window(title='Restore cloud preferences',transient_for=self.window,modal=True);dialog.add_css_class('bol');dialog.set_default_size(470,330)
+        box=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=16);margins(box,26);dialog.set_child(box)
+        box.append(label('Restore preferences','page-title'))
+        box.append(label('This replaces the synced preferences on this device. API keys, history, and local paths stay here.','muted',True))
+        summary='Theme: '+THEMES.get(payload.get('theme'),THEMES['dark'])['name']+'\nVocabulary: '+str(len(payload.get('vocabulary',[])))+' words\nSnippets: '+str(len(payload.get('snippets',{})))
+        box.append(label(summary,'row-title',True));buttons=Gtk.Box(spacing=10)
+        cancel=Gtk.Button(label='Cancel');cancel.connect('clicked',lambda b:dialog.close());buttons.append(cancel)
+        apply=Gtk.Button(label='Restore on this device');apply.add_css_class('primary');buttons.append(apply);box.append(buttons)
+        def restore(button):
+            try:
+                if self.save_button.get_sensitive():raise ValueError('Settings changed while loading. Save them before restoring.')
+                current=self.account_client()
+                if current.session.get('user',{}).get('id')!=client.session.get('user',{}).get('id') or current.url!=client.url:raise ValueError('Account changed. Load cloud preferences again.')
+                data=self.core.config();data.update(payload);self.core.save_config(data)
+                self.sync_controls(data)
+                self.loading=True
+                try:
+                    for key in ('writing_rules','vocabulary','profiles','corrections','snippets'):
+                        if key not in payload:continue
+                        value=payload[key]
+                        if key=='vocabulary':value='\n'.join(value)
+                        elif isinstance(value,dict):value=format_pairs(value)
+                        self.buffers[key].set_text(value)
+                finally:self.loading=False
+                self.save_button.set_sensitive(False);client.applied(revision);self.preview_theme();self.update_account_section('Cloud preferences restored on this device.');dialog.close()
+            except Exception as error:self.dialog('Could not restore',str(error))
+        apply.connect('clicked',restore);dialog.present()
 
     def show_setup(self,*args):
         dialog=Gtk.Window(title='Welcome to Bol',transient_for=self.window,modal=True);dialog.add_css_class('bol');dialog.set_default_size(680,660)

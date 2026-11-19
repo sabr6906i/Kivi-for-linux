@@ -44,14 +44,14 @@ The app requires Hyprland 0.55+ with the Lua configuration API. Other compositor
 
 The main sidebar contains **History** and **Text to Audio**. Click the **Profile & settings** button at the bottom to open Profile, General, Connections, Writing, Vocabulary, Snippets or Shortcuts. Technical provider details are collapsed under **Connections → Advanced provider settings**.
 
-**Profile** contains eight saved appearance choices with live preview: Midnight, Graphite, Deep Ocean, and Cinder (dark); Paper, Porcelain, Ivory, and Sage (light). Each light palette has matching accents and SVG icons: cobalt/violet for Paper, sapphire/plum for Porcelain, bronze/burgundy for Ivory, and emerald/teal for Sage. Open **Profile & settings → Your profile → Appearance** to compare palette previews and save your choice. Profile also contains a local display name, the default opening page, and whether advanced connection fields should be expanded. This is an on-device profile, not a cloud account or a Sarvam login. It does not sync or isolate multiple users' data.
+**Profile** contains eight saved appearance choices with live preview: Midnight, Graphite, Deep Ocean, and Cinder (dark); Paper, Porcelain, Ivory, and Sage (light). Each light palette has matching accents and SVG icons: cobalt/violet for Paper, sapphire/plum for Porcelain, bronze/burgundy for Ivory, and emerald/teal for Sage. Open **Profile & settings → Your profile → Appearance** to compare palette previews and save your choice. Profile also contains a local display name, the default opening page, and whether advanced connection fields should be expanded. The local workspace can optionally connect to a Bol account using Supabase email-code sign-in and manual preference sync. Signing in does not isolate local workspaces or sign in to speech providers. See [Supabase account setup](supabase/README.md).
 
 For a first installation without configured speech access, Bol opens a setup assistant. You can also open it later from **Profile → Open setup assistant** or **Connections → Open setup assistant**.
 
 - **Sarvam cloud:** the assistant opens Sarvam's key-management page in your default browser. Sign in there, create/copy a connection key once, then paste it into Bol (or click Paste copied key). Bol saves the key privately. The assistant does not read browser cookies, scrape keys, or automatically create credentials. Saving a key is not a live API-authentication test.
 - **Local Whisper:** the assistant detects your existing installation and model and validates their paths. No browser account or API key is required for local dictation. An English-only model requires English/auto language selection.
 
-Sarvam's [public authentication documentation](https://docs.sarvam.ai/api-reference/authentication) requires manually generated subscription keys; it does not document delegated consumer OAuth for this use case. A browser session alone cannot authorize Bol API calls. Fully keyless Bol sign-in would require a separately hosted Bol account/backend or an official provider authorization flow; a Bol-hosted account/backend and Sarvam OAuth are not implemented here. ElevenLabs separately supports browser sign-in through its official CLI, as described below.
+Sarvam's [public authentication documentation](https://docs.sarvam.ai/api-reference/authentication) requires manually generated subscription keys; it does not document delegated consumer OAuth for this use case. A browser session alone cannot authorize Bol API calls. Fully keyless Bol sign-in would require a separately hosted Bol account/backend or an official provider authorization flow; the optional Supabase Bol account syncs preferences but does not proxy or pay for Sarvam API usage. Sarvam OAuth is not implemented here. ElevenLabs separately supports browser sign-in through its official CLI, as described below.
 
 ## Speech and writing providers
 
@@ -150,7 +150,7 @@ Bol implements the corresponding basic workflows using public APIs, with these r
 - Corrections are remembered explicitly through the Vocabulary tab or Remember correction button. Passive learning from arbitrary edits is not implemented.
 - Voice formatting produces plain text/Markdown; it cannot reliably apply rich formatting such as actual bold inside every editor.
 - It uses selection capture and keyboard paste. Browser fields, unusual editors, XWayland apps and terminals can behave differently. Selection capture is intentionally skipped in terminals to avoid Ctrl+C interrupting a command; voice editing there drafts from speech.
-- No screen-context reading, live streaming captions, system-tray menu, automatic updater, offline model, cloud synchronization or cross-compositor packaging yet.
+- No screen-context reading, live streaming captions, system-tray menu, automatic updater, offline model, automatic cloud synchronization or cross-compositor packaging yet. Manual preference sync is available after configuring Supabase.
 - Model output quality and latency are not guaranteed to match Kivi's private prompts or services.
 
 ## Development

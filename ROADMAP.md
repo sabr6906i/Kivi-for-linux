@@ -54,7 +54,7 @@ Release readiness requires evidence from real use in the supported app/desktop m
 
 ## Account experience beyond local profiles
 
-Implemented: local display name/startup preferences, a profile settings menu, first-run setup, and browser-guided Sarvam key connection. This is not cloud authentication.
+Implemented: local display name/startup preferences, a profile settings menu, first-run setup, browser-guided Sarvam key connection, and optional Supabase email-code authentication with manual preference sync. The Supabase migration includes owner-only RLS and revision conflict checks. A hosted project and real email delivery still need to be configured and verified. Provider API credentials remain device-local.
 
 A real keyless account experience needs a separate project:
 
