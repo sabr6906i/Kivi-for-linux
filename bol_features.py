@@ -11,7 +11,9 @@ import urllib.error
 LANGUAGES = ['unknown', 'en-IN', 'hi-IN', 'pa-IN', 'bn-IN', 'kn-IN', 'ml-IN', 'mr-IN', 'od-IN', 'ta-IN', 'te-IN', 'gu-IN', 'as-IN', 'ur-IN', 'ne-IN', 'kok-IN', 'sa-IN', 'sd-IN', 'ks-IN', 'doi-IN', 'brx-IN', 'mni-IN', 'mai-IN', 'sat-IN']
 MODES = ['transcribe', 'codemix', 'translit', 'translate', 'verbatim']
 DEFAULTS = {
-    'supabase_url': '', 'supabase_publishable_key': '',
+    'supabase_url': 'https://dirfgvholwsvlifjasan.supabase.co',
+    'supabase_publishable_key': 'sb_publishable__I6wNJwuesRq4iGQ4MSZTA_tITXuxhy',
+    'account_auto_sync': True, 'welcome_completed': False,
     'profile_name': '', 'theme': 'dark', 'start_page': 'History', 'show_advanced': False, 'setup_completed': False,
     'speech_provider': 'sarvam', 'elevenlabs_model': 'scribe_v2', 'writing_provider': 'sarvam',
     'whisper_binary': '', 'whisper_model': '', 'local_speech_writing': False,

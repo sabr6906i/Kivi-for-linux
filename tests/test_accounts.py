@@ -137,3 +137,63 @@ class AccountTests(unittest.TestCase):
             with self.subTest(error_code=error_code), patch('urllib.request.build_opener', return_value=opener):
                 with self.assertRaisesRegex(ValueError, message) as caught:self.client.send_code('user@example.com')
                 self.assertNotIn('private-server-text', str(caught.exception))
+
+    def test_auto_sync_first_device_uploads_without_manual_setup(self):
+        self.session()
+        with patch.object(self.client, 'download', return_value=None), patch.object(self.client, 'request', return_value=1) as request:
+            payload, revision = self.client.synchronize(self.settings)
+        self.assertEqual(revision, 1)
+        self.assertEqual(payload, preferences(self.settings))
+        self.assertEqual(request.call_args.args[1]['expected_revision'], 0)
+        self.assertNotIn('base_preferences', self.client.session)  # acknowledged only after local apply
+        self.client.applied(revision, payload)
+        self.assertEqual(self.client.session['base_preferences'], payload)
+
+    def test_auto_sync_new_device_restores_cloud_without_upload(self):
+        self.session()
+        cloud = preferences(self.settings);cloud.update({'theme': 'ivory', 'profile_name': 'Alice'})
+        with patch.object(self.client, 'download', return_value=(cloud, 4)), patch.object(self.client, 'request') as request:
+            payload, revision = self.client.synchronize(self.settings)
+            request.assert_not_called()
+        self.assertEqual(payload, cloud)
+        self.assertEqual(revision, 4)
+
+    def test_auto_sync_merges_nonoverlapping_local_and_remote_changes(self):
+        self.session()
+        baseline = preferences(self.settings);self.client.session['base_preferences'] = baseline
+        local = {**self.settings, 'theme': 'ivory'}
+        cloud = {**baseline, 'profile_name': 'Alice'}
+        with patch.object(self.client, 'download', return_value=(cloud, 5)), patch.object(self.client, 'request', return_value=6) as request:
+            payload, revision = self.client.synchronize(local)
+        self.assertEqual((payload['theme'], payload['profile_name'], revision), ('ivory', 'Alice', 6))
+        self.assertEqual(request.call_args.args[1]['expected_revision'], 5)
+
+    def test_auto_sync_preserves_conflicting_changes_without_writing(self):
+        from bol_accounts import SyncConflict
+        self.session();baseline = preferences(self.settings);self.client.session['base_preferences'] = baseline
+        cloud = {**baseline, 'theme': 'ivory'}
+        with patch.object(self.client, 'download', return_value=(cloud, 5)), patch.object(self.client, 'request') as request:
+            with self.assertRaises(SyncConflict) as error:self.client.synchronize({**self.settings, 'theme': 'sage'})
+            request.assert_not_called()
+        self.assertEqual(error.exception.fields, ['theme'])
+        self.assertEqual(error.exception.cloud['theme'], 'ivory')
+        self.assertEqual(self.client.session['base_preferences']['theme'], baseline['theme'])
+
+    def test_auto_sync_unchanged_preferences_need_no_upload(self):
+        self.session();payload = preferences(self.settings);self.client.session['base_preferences'] = payload
+        with patch.object(self.client, 'download', return_value=(payload, 8)), patch.object(self.client, 'request') as request:
+            self.assertEqual(self.client.synchronize(self.settings), (payload, 8))
+            request.assert_not_called()
+
+    def test_auto_sync_refresh_keeps_baseline(self):
+        self.session();baseline = preferences(self.settings);self.client.session['base_preferences'] = baseline
+        self.client.session['expires_at'] = 0
+        with patch.object(self.client, 'request', return_value={'access_token': 'new', 'refresh_token': 'new-r', 'user': {'id': 'user-one'}}):
+            self.client.access_token()
+        self.assertEqual(self.client.session['base_preferences'], baseline)
+
+    def test_public_build_has_bundled_connection_without_user_configuration(self):
+        client = AccountClient(self.tmp.name, {})
+        client.validate_project()
+        self.assertTrue(client.url.endswith('.supabase.co'))
+        self.assertTrue(client.key.startswith('sb_publishable_'))

@@ -1,5 +1,6 @@
 """Native GTK 4 settings workspace for Bol."""
 import json
+import os
 import threading
 import re
 import colorsys
@@ -13,7 +14,7 @@ from bol_features import LANGUAGES, MODES, History, audio_level, history_date, f
 from bol_providers import SPEECH_PROVIDERS, WRITING_PROVIDERS, detect_whisper, validate_speech
 from bol_audio import synthesize, suggest_delivery, STYLE_PRESETS, TTS_LANGUAGES, TTS_VOICES
 from bol_themes import THEMES, is_light, overrides, light_accents
-from bol_accounts import AccountClient, SYNC_KEYS
+from bol_accounts import AccountClient, SYNC_KEYS, preferences, SyncConflict
 from bol_ui import parse_pairs, format_pairs, apply_shortcuts
 
 CSS = b'''
@@ -397,7 +398,10 @@ class Workspace:
         self.build_audio();self.build_general();self.build_providers();self.build_writing();self.build_vocabulary();self.build_snippets();self.build_history();self.build_shortcuts();self.build_profile()
         self.update_provider_sections();self.loading=False;self.update_profile_identity();self.select(self.settings.get('start_page','History'));self.window.present()
         configured=bool(self.settings.get('api_key') or self.settings.get('speech_api_key') or self.settings.get('speech_provider') in ['whispercpp','elevenlabs'])
-        if not self.settings.get('setup_completed') and not configured:GLib.idle_add(self.show_setup)
+        if not self.settings.get('welcome_completed') and not self.settings.get('setup_completed') and not configured:GLib.idle_add(self.show_welcome)
+        elif not self.settings.get('setup_completed') and not configured:GLib.idle_add(self.show_setup)
+        GLib.idle_add(self.auto_account_sync)
+        GLib.timeout_add_seconds(45,self.account_sync_tick)
         GLib.timeout_add(800,self.poll)
 
     def minimize_window(self):
@@ -656,7 +660,7 @@ class Workspace:
     def build_profile(self):
         page=self.pages['Profile']
         self.build_account_section(page)
-        group=self.section(page,'Your profile','Your display name is local unless you upload your preferences to your Bol account.')
+        group=self.section(page,'Your profile','Your display name syncs with your Bol account when automatic sync is enabled.')
         self.entry(group,'profile_name','Display name','How Bol labels your workspace.').set_placeholder_text('Your name')
         self.widgets['profile_name'].set_max_length(80)
         group=self.section(page,'Appearance','Choose a palette to preview it immediately. Save changes to keep it.')
@@ -682,20 +686,28 @@ class Workspace:
         self.choice(group,'start_page','Open Bol to','Choose your default workspace.',['History','Text to Audio'],{})
         self.toggle(group,'show_advanced','Expand advanced connections','Show provider URLs, keys, and model paths when opening Connections.')
         group=self.section(page,'Setup')
+        welcome=Gtk.Button(label='Open welcome screen');welcome.connect('clicked',self.show_welcome);self.row(group,'Getting started','Preview the first-launch welcome page.',welcome)
         setup=Gtk.Button(label='Open setup assistant');setup.connect('clicked',lambda b:self.show_setup());self.row(group,'Speech setup','Connect a cloud service or choose local Whisper.',setup)
-        page.append(label('Signing in does not switch or isolate local workspaces. Cloud sync is manual; only the preferences listed above are synced. History and API keys stay on this device.','muted',True))
+        page.append(label('Signing in does not switch or isolate local workspaces. Only the preferences listed above sync automatically while signed in. History and API keys stay on this device.','muted',True))
 
     def build_account_section(self,page):
         self.account_busy=False
-        group=self.section(page,'Bol account','Sign in on another device to restore your preferences. Powered by Supabase.')
+        group=self.section(page,'Bol account','Sign in once. Your preferences follow you automatically.')
         self.account_identity=label('','row-title',True);self.account_identity.set_hexpand(True)
         self.account_signin=action_button('Sign in','profile');self.account_signin.connect('clicked',lambda b:self.show_account_signin())
         identity=Gtk.Box(spacing=12);margins(identity,16);identity.append(self.account_identity);identity.append(self.account_signin);group.append(identity)
         self.account_note=label('','muted',True);margins(self.account_note,16);group.append(self.account_note)
+        self.account_pending_conflict=None
         controls=Gtk.Box(spacing=8);margins(controls,16)
-        self.account_upload=action_button('Upload this device','export');self.account_upload.connect('clicked',lambda b:self.account_sync('upload'));controls.append(self.account_upload)
-        self.account_restore=action_button('Restore from cloud','refresh');self.account_restore.connect('clicked',lambda b:self.account_sync('restore'));controls.append(self.account_restore)
+        self.account_sync_now=action_button('Sync now','refresh');self.account_sync_now.connect('clicked',lambda b:self.auto_account_sync(force=True));controls.append(self.account_sync_now)
+        self.account_resolve=Gtk.Button(label='Review changes');self.account_resolve.connect('clicked',lambda b:self.resolve_account_conflict());controls.append(self.account_resolve)
         self.account_signout=Gtk.Button(label='Sign out');self.account_signout.connect('clicked',lambda b:self.account_logout());controls.append(self.account_signout);group.append(controls)
+        recovery=Gtk.Expander(label='Sync recovery');margins(recovery,16)
+        recovery_controls=Gtk.Box(spacing=8)
+        self.account_upload=action_button('Upload this device','export');self.account_upload.connect('clicked',lambda b:self.account_sync('upload'));recovery_controls.append(self.account_upload)
+        self.account_restore=action_button('Restore from cloud','refresh');self.account_restore.connect('clicked',lambda b:self.account_sync('restore'));recovery_controls.append(self.account_restore)
+        recovery.set_child(recovery_controls);group.append(recovery)
+        self.toggle(group,'account_auto_sync','Automatic sync','Save and restore preferences automatically while Bol is open.')
         description=label('Sync includes your display name, theme, language, writing rules, vocabulary, corrections, snippets, and edit-review preference. API keys, history, audio, shortcuts, and model paths stay here.','muted',True);margins(description,16);group.append(description)
         setup=Gtk.Expander(label='Cloud project setup');margins(setup,16)
         box=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=10)
@@ -703,7 +715,8 @@ class Workspace:
         self.account_url=Gtk.Entry();self.account_url.set_placeholder_text('https://your-project.supabase.co');self.account_url.set_text(self.settings.get('supabase_url',''));box.append(self.account_url)
         self.account_key=Gtk.Entry();self.account_key.set_placeholder_text('sb_publishable_…');self.account_key.set_text(self.settings.get('supabase_publishable_key',''));box.append(self.account_key)
         self.account_setup_save=Gtk.Button(label='Save cloud connection');self.account_setup_save.connect('clicked',lambda b:self.action(self.save_account_project));box.append(self.account_setup_save)
-        setup.set_child(box);group.append(setup)
+        setup.set_child(box);setup.set_visible(os.environ.get('BOL_DEVELOPER_MODE')=='1');group.append(setup)
+        self.account_project_setup=setup
         self.update_account_section()
 
     def account_client(self):
@@ -713,10 +726,13 @@ class Workspace:
         client=self.account_client();signed=client.signed_in
         self.profile_account_caption.set_text(client.session.get('user',{}).get('email','Bol account') if signed else 'Local workspace · not signed in')
         self.account_identity.set_text(client.session.get('user',{}).get('email','Signed in') if signed else 'Local workspace · not signed in')
-        note='Last sync: '+client.session['last_sync'] if signed and client.session.get('last_sync') else 'Your local preferences have not been synced.'
+        note='Synced · '+client.session['last_sync'] if signed and client.session.get('last_sync') else 'Your preferences sync after you sign in.'
+        if signed and not self.core.config().get('account_auto_sync',True):note='Automatic sync is paused.'
+        if self.account_pending_conflict:note='Changes on both devices need review. Your local preferences are safe.'
         if not client.url or not client.key:note='Cloud project is not configured. Open Cloud project setup below.'
         self.account_note.set_text(message or note)
-        for button in (self.account_upload,self.account_restore,self.account_signout):button.set_sensitive(signed and not self.account_busy)
+        for button in (self.account_upload,self.account_restore,self.account_signout,self.account_sync_now,self.account_resolve):button.set_sensitive(signed and not self.account_busy)
+        self.account_resolve.set_visible(signed and self.account_pending_conflict is not None)
         self.account_signin.set_visible(not signed);self.account_signin.set_sensitive(not self.account_busy)
         self.account_setup_save.set_sensitive(not self.account_busy)
         self.account_url.set_sensitive(not self.account_busy);self.account_key.set_sensitive(not self.account_busy)
@@ -745,10 +761,10 @@ class Workspace:
             GLib.idle_add(finish,result,error)
         threading.Thread(target=worker,daemon=True).start()
 
-    def show_account_signin(self):
+    def show_account_signin(self,parent=None,on_success=None):
         try:self.account_client().validate_project()
         except Exception as error:self.dialog('Connect your cloud project',str(error));return
-        dialog=Gtk.Window(title='Sign in to Bol',transient_for=self.window,modal=True);dialog.add_css_class('bol');dialog.set_default_size(450,340)
+        dialog=Gtk.Window(title='Sign in to Bol',transient_for=parent or self.window,modal=True);dialog.add_css_class('bol');dialog.set_default_size(450,340)
         box=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=14);margins(box,26);dialog.set_child(box)
         box.append(label('Your Bol account','page-title'));box.append(label('We will email a sign-in link or code. New email addresses create an account. No password needed.','muted',True))
         email=Gtk.Entry();email.set_placeholder_text('you@example.com');box.append(email)
@@ -778,7 +794,10 @@ class Workspace:
                     else:
                         code.set_visible(True);verify.set_visible(True);resend.set_visible(True);send.set_visible(False)
                         note.set_text('Copy the sign-in link from your email and paste it here, or enter its numeric code. Do not open the link first.');code.grab_focus()
-                self.update_account_section('Signed in. Upload this device or restore your cloud preferences.' if not error and verify_code else None)
+                self.update_account_section('Signed in. Syncing your preferences…' if not error and verify_code else None)
+                if not error and verify_code:
+                    GLib.idle_add(self.auto_account_sync)
+                    if on_success:on_success()
                 return False
             def worker():
                 try:result=client.verify_code(address,token) if verify_code else client.send_code(address);error=None
@@ -787,8 +806,89 @@ class Workspace:
             threading.Thread(target=worker,daemon=True).start()
         send.connect('clicked',lambda b:run());resend.connect('clicked',lambda b:run());verify.connect('clicked',lambda b:run(True));code.connect('activate',lambda e:run(True));dialog.present()
 
+    def account_sync_tick(self):
+        if not self.alive:return False
+        self.auto_account_sync()
+        return True
+
+    def apply_account_preferences(self,payload):
+        previous=self.core.config()
+        # Restore cloud identity into an untouched speech-setup form as well.
+        name=getattr(self,'speech_setup_name',None)
+        if name is not None and name.get_mapped() and name.get_text()==previous.get('profile_name',''):
+            name.set_text(payload.get('profile_name',name.get_text()))
+        language=getattr(self,'speech_setup_language',None)
+        if language is not None and language.get_mapped() and LANGUAGES[language.get_selected()]==previous.get('language','unknown') and payload.get('language') in LANGUAGES:
+            language.set_selected(LANGUAGES.index(payload['language']))
+        data=previous;data.update(payload);self.core.save_config(data)
+        self.sync_controls(data)
+        self.loading=True
+        try:
+            for key in ('writing_rules','vocabulary','profiles','corrections','snippets'):
+                if key not in payload:continue
+                value=payload[key]
+                if key=='vocabulary':value='\n'.join(value)
+                elif isinstance(value,dict):value=format_pairs(value)
+                self.buffers[key].set_text(value)
+        finally:self.loading=False
+        self.save_button.set_sensitive(False);self.preview_theme()
+
+    def auto_account_sync(self,force=False):
+        if not self.alive or self.account_busy:return False
+        if self.account_pending_conflict:
+            if force:self.resolve_account_conflict()
+            return False
+        settings=self.core.config();client=self.account_client()
+        if not client.signed_in or (not force and not settings.get('account_auto_sync',True)):return False
+        if self.save_button.get_sensitive():
+            if force:self.update_account_section('Save your current changes to sync them.')
+            return False
+        snapshot=preferences(settings)
+        self.account_busy=True;self.update_account_section('Syncing…')
+        def finish(result,error):
+            if not self.alive:return False
+            self.account_busy=False
+            if isinstance(error,SyncConflict):
+                self.account_pending_conflict=(client,error);self.update_account_section();return False
+            if error:self.update_account_section('Sync paused: '+str(error)+' Your changes remain on this device.');return False
+            current=self.account_client()
+            if current.url!=client.url or current.session.get('user',{}).get('id')!=client.session.get('user',{}).get('id'):return False
+            if self.save_button.get_sensitive():self.update_account_section('Local changes pending. Sync resumes after you save.');return False
+            try:
+                payload,revision=result
+                latest=preferences(self.core.config())
+                # Keep edits saved on this device while the network request ran.
+                applied={key:latest[key] if latest.get(key)!=snapshot.get(key) else payload[key] for key in payload}
+                self.apply_account_preferences(applied)
+                client.applied(revision,payload);self.update_account_section()
+                if applied!=payload:GLib.idle_add(self.auto_account_sync)
+            except Exception as caught:self.update_account_section('Could not apply cloud preferences: '+str(caught))
+            return False
+        def worker():
+            try:result=client.synchronize(settings);error=None
+            except Exception as caught:result=None;error=caught
+            GLib.idle_add(finish,result,error)
+        threading.Thread(target=worker,daemon=True).start()
+        return False
+
+    def resolve_account_conflict(self):
+        if not self.account_pending_conflict:return
+        client,conflict=self.account_pending_conflict
+        dialog=Gtk.Window(title='Review sync changes',transient_for=self.window,modal=True);dialog.add_css_class('bol');dialog.set_default_size(480,320)
+        box=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=16);margins(box,24);dialog.set_child(box)
+        box.append(label('Keep your changes','page-title'));box.append(label('Both devices changed these preferences: '+', '.join(k.replace('_',' ') for k in conflict.fields)+'. Choose which version to keep.','muted',True))
+        local=Gtk.Button(label='Use this device’s preferences');cloud=Gtk.Button(label='Review cloud preferences');later=Gtk.Button(label='Decide later')
+        box.append(local);box.append(cloud);box.append(later)
+        def keep_local(button):
+            if self.save_button.get_sensitive():self.dialog('Save changes first','Save your current changes before resolving sync.');return
+            dialog.close();settings=self.core.config()
+            def done(revision):self.account_pending_conflict=None;self.update_account_section()
+            self.account_job(lambda:client.upload(settings,expected_revision=conflict.revision),done)
+        local.connect('clicked',keep_local);cloud.connect('clicked',lambda b:(dialog.close(),self.review_cloud_restore(client,(conflict.cloud,conflict.revision))));later.connect('clicked',lambda b:dialog.close());dialog.present()
+
     def account_logout(self):
         client=self.account_client()
+        self.account_pending_conflict=None
         self.account_job(client.sign_out,lambda result:self.update_account_section('Signed out. Local preferences and provider connections are unchanged.'))
 
     def account_sync(self,mode):
@@ -796,7 +896,8 @@ class Workspace:
         client=self.account_client()
         if mode=='upload':
             data=self.core.config()
-            self.account_job(lambda:client.upload(data),lambda revision:self.update_account_section('Preferences uploaded. Restore them on your other device.'))
+            def uploaded(revision):self.account_pending_conflict=None;self.update_account_section('Preferences uploaded.')
+            self.account_job(lambda:client.upload(data),uploaded)
         else:self.account_job(client.download,lambda result:self.review_cloud_restore(client,result))
 
     def review_cloud_restore(self,client,result):
@@ -825,20 +926,43 @@ class Workspace:
                         elif isinstance(value,dict):value=format_pairs(value)
                         self.buffers[key].set_text(value)
                 finally:self.loading=False
-                self.save_button.set_sensitive(False);client.applied(revision);self.preview_theme();self.update_account_section('Cloud preferences restored on this device.');dialog.close()
+                self.save_button.set_sensitive(False);client.applied(revision,payload);self.account_pending_conflict=None;self.preview_theme();self.update_account_section('Cloud preferences restored on this device.');dialog.close()
             except Exception as error:self.dialog('Could not restore',str(error))
         apply.connect('clicked',restore);dialog.present()
 
+    def show_welcome(self,*args):
+        if hasattr(self,'welcome_window') and self.welcome_window.get_visible():self.welcome_window.present();return False
+        dialog=Gtk.Window(title='Welcome to Bol',transient_for=self.window,modal=True);dialog.add_css_class('bol');dialog.set_default_size(620,710);self.welcome_window=dialog
+        scroll=Gtk.ScrolledWindow();scroll.set_policy(Gtk.PolicyType.NEVER,Gtk.PolicyType.AUTOMATIC);dialog.set_child(scroll)
+        box=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=22);margins(box,40);scroll.set_child(box)
+        brand=Gtk.Box(spacing=12);brand.append(svg_icon('brand',36));brand.append(label('Bol','brand'));box.append(brand)
+        title=label('Your voice.\nYour workspace.','page-title',True);box.append(title)
+        box.append(label('Dictate naturally, refine words by voice, and turn your text into speech. Start with a Bol account or keep working on this device.','muted',True))
+        features=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=18)
+        for icon,title,hint in [('microphone','Speak instead of typing','Dictation and voice editing for your Linux workspace.'),('refresh','Your preferences, everywhere','Sign in to sync your theme, vocabulary, snippets, and writing preferences.'),('vocabulary','Choose where speech runs','Connect a speech service or use your local Whisper model.')]:
+            row=Gtk.Box(spacing=14);row.append(svg_icon(icon,24));words=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=4);words.append(label(title,'row-title'));words.append(label(hint,'muted',True));row.append(words);features.append(row)
+        box.append(features)
+        sign=action_button('Sign in & sync','profile');sign.add_css_class('primary');box.append(sign)
+        skip=Gtk.Button(label='Continue without an account');box.append(skip)
+        note=label('Account sync includes preferences only. Recordings, history, and provider API keys stay on this device. Bol sign-in does not include paid speech-service access.','muted',True);box.append(note)
+        def complete():
+            data=self.core.config();data['welcome_completed']=True;self.core.save_config(data);self.settings['welcome_completed']=True;dialog.close()
+            configured=bool(data.get('api_key') or data.get('speech_api_key') or data.get('speech_provider') in ('whispercpp','elevenlabs'))
+            if not configured:GLib.idle_add(self.show_setup)
+            else:self.select(data.get('start_page','History'))
+        sign.connect('clicked',lambda b:self.show_account_signin(parent=dialog,on_success=complete));skip.connect('clicked',lambda b:complete())
+        dialog.present();return False
+
     def show_setup(self,*args):
-        dialog=Gtk.Window(title='Welcome to Bol',transient_for=self.window,modal=True);dialog.add_css_class('bol');dialog.set_default_size(680,660)
+        dialog=Gtk.Window(title='Set up speech',transient_for=self.window,modal=True);dialog.add_css_class('bol');dialog.set_default_size(680,660)
         scroller=Gtk.ScrolledWindow();scroller.set_policy(Gtk.PolicyType.NEVER,Gtk.PolicyType.AUTOMATIC);dialog.set_child(scroller)
         box=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=18);margins(box,28);scroller.set_child(box)
         box.append(label('Make Bol yours','page-title'));box.append(label('A few simple choices, then you are ready to speak.','muted',True))
-        name=Gtk.Entry();name.set_max_length(80);name.set_placeholder_text('Your name (optional)');name.set_text(self.settings.get('profile_name',''));box.append(name)
+        name=Gtk.Entry();name.set_max_length(80);name.set_placeholder_text('Your name (optional)');name.set_text(self.settings.get('profile_name',''));box.append(name);self.speech_setup_name=name
         options=Gtk.DropDown.new_from_strings(['Sarvam cloud · multilingual speech','Local Whisper · on this device'])
         options.set_selected(1 if self.settings.get('speech_provider') in ['whispercpp','elevenlabs'] else 0);box.append(options)
         language=Gtk.DropDown.new_from_strings([LANGUAGE_NAMES.get(value,value) for value in LANGUAGES]);language.set_selected(LANGUAGES.index(self.settings.get('language','unknown')) if self.settings.get('language') in LANGUAGES else 0)
-        box.append(label('Language','section-title'));box.append(language)
+        box.append(label('Language','section-title'));box.append(language);self.speech_setup_language=language
         cloud=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=12)
         cloud.append(label('Connect Sarvam','section-title'))
         cloud.append(label('1. Open Sarvam in your browser and sign in.\n2. Create a key in API Keys.\n3. Copy it once and paste it below. Bol remembers it.','muted',True))
@@ -880,7 +1004,7 @@ class Workspace:
                     if not data.get('whisper_binary'):data['whisper_binary']=binary
                     if not data.get('whisper_model'):data['whisper_model']=model
                     validate_speech(data)
-                dirty=self.save_button.get_sensitive();self.core.save_config(data);self.sync_controls(data,only=['profile_name','language','speech_provider','api_key','whisper_binary','whisper_model'],preserve_dirty=dirty);dialog.close();self.select(data.get('start_page','History'));self.status.set_text('Setup complete')
+                dirty=self.save_button.get_sensitive();self.core.save_config(data);self.sync_controls(data,only=['profile_name','language','speech_provider','api_key','whisper_binary','whisper_model'],preserve_dirty=dirty);dialog.close();self.select(data.get('start_page','History'));self.status.set_text('Setup complete');GLib.idle_add(self.auto_account_sync)
             except Exception as error:note.set_text(str(error))
         finish.connect('clicked',complete);dialog.present();return False
 
@@ -1188,6 +1312,7 @@ class Workspace:
             self.update_profile_identity()
             for key,widget in self.key_labels.items():widget.set_text(data[key])
             self.save_note.set_text('All changes saved');self.save_button.set_sensitive(False)
+            GLib.idle_add(self.auto_account_sync)
         except Exception as error:self.dialog('Could not save',str(error))
 
     def refresh_history(self, load_latest=True):

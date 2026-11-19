@@ -54,7 +54,7 @@ Release readiness requires evidence from real use in the supported app/desktop m
 
 ## Account experience beyond local profiles
 
-Implemented: local display name/startup preferences, a profile settings menu, first-run setup, browser-guided Sarvam key connection, and optional Supabase email-code authentication with manual preference sync. The Supabase migration includes owner-only RLS and revision conflict checks. A hosted project and real email delivery still need to be configured and verified. Provider API credentials remain device-local.
+Implemented: local display name/startup preferences, a profile settings menu, first-run setup, browser-guided Sarvam key connection, and optional Supabase email-link/code authentication with automatic preference sync and a first-launch welcome page. The Supabase migration includes owner-only RLS and revision conflict checks. The public build bundles the configured project connection. Automatic sync merges independent changes, pauses on conflicting edits, and keeps unsaved edits safe. A real second-device test is still part of release verification. Provider API credentials remain device-local.
 
 A real keyless account experience needs a separate project:
 
@@ -65,4 +65,4 @@ A real keyless account experience needs a separate project:
 
 An ElevenLabs CLI browser-sign-in adapter is now implemented; account authorization and a live account transcription still need user verification. It uses the official provider helper, not a Bol-hosted identity service.
 
-Provider dashboard cookies or website sign-in pages are not a replacement for a supported API authorization flow. No backend or billing service has been deployed for Bol.
+Provider dashboard cookies or website sign-in pages are not a replacement for a supported API authorization flow. Supabase hosts Bol accounts and preferences; no provider-proxy or billing service has been deployed for Bol.

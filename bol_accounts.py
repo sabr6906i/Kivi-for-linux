@@ -52,8 +52,8 @@ class AccountClient:
     def __init__(self, folder, settings):
         self.folder = Path(folder)
         self.path = self.folder / 'account-session.json'
-        self.url = str(settings.get('supabase_url', '')).strip().rstrip('/')
-        self.key = str(settings.get('supabase_publishable_key', '')).strip()
+        self.url = str((settings.get('supabase_url') or DEFAULTS['supabase_url'])).strip().rstrip('/')
+        self.key = str((settings.get('supabase_publishable_key') or DEFAULTS['supabase_publishable_key'])).strip()
         self.session = {}
         try:
             saved = json.loads(self.path.read_text())
@@ -175,10 +175,12 @@ class AccountClient:
             raise ValueError('The account service did not return a complete session.')
         old_user = self.session.get('user', {}).get('id')
         revision = self.session.get('revision', 0) if old_user == result['user']['id'] else 0
+        baseline = self.session.get('base_preferences') if old_user == result['user']['id'] else None
         self.session = {'project_url': self.url, 'access_token': result['access_token'],
                         'refresh_token': result['refresh_token'], 'expires_at': time.time() + int(result.get('expires_in', 3600)),
                         'user': {'id': result['user']['id'], 'email': result['user'].get('email', '')},
                         'revision': revision, 'last_sync': self.session.get('last_sync', '') if old_user == result['user']['id'] else ''}
+        if baseline is not None:self.session['base_preferences'] = baseline
         self.persist()
 
     def access_token(self):
@@ -188,23 +190,25 @@ class AccountClient:
             self.accept_session(self.request('/auth/v1/token?grant_type=refresh_token', {'refresh_token': self.session['refresh_token']}))
         return self.session['access_token']
 
-    def upload(self, settings):
+    def upload(self, settings, expected_revision=None):
         payload = preferences(settings)
         result = self.request('/rest/v1/rpc/bol_save_preferences',
-                              {'new_payload': payload, 'expected_revision': self.session.get('revision', 0)}, self.access_token())
+                              {'new_payload': payload, 'expected_revision': self.session.get('revision', 0) if expected_revision is None else expected_revision}, self.access_token())
         if type(result) is not int:
             raise ValueError('Unexpected sync response. Check the database migration.')
         self.session['revision'] = result
+        self.session['base_preferences'] = payload
         self.mark_synced()
         return result
 
-    def download(self):
+    def download(self, allow_empty=False):
         user_id = self.session.get('user', {}).get('id', '')
         query = urllib.parse.urlencode({'user_id': 'eq.' + user_id, 'select': 'payload,revision,updated_at'})
         result = self.request('/rest/v1/bol_preferences?' + query, token=self.access_token())
         if not isinstance(result, list):
             raise ValueError('Unexpected cloud preferences response.')
         if not result:
+            if allow_empty:return None
             raise ValueError('No preferences saved in the cloud yet. Upload from your first device.')
         row = result[0]
         payload = preferences(row['payload'])
@@ -212,9 +216,43 @@ class AccountClient:
             raise ValueError('Cloud preferences contain unsupported fields.')
         return payload, row['revision']
 
-    def applied(self, revision):
+    def applied(self, revision, payload=None):
+        if payload is not None:self.session['base_preferences'] = preferences(payload)
         self.session['revision'] = revision
         self.mark_synced()
+
+    def synchronize(self, settings):
+        """Return a merged snapshot; the caller acknowledges after applying locally."""
+        local = preferences(settings)
+        remote = self.download(allow_empty=True)
+        if remote is None:
+            merged, revision = local, 0
+            needs_upload = True
+        else:
+            cloud, revision = remote
+            base = preferences(self.session.get('base_preferences', DEFAULTS))
+            defaults = preferences(DEFAULTS)
+            cloud = {**defaults, **cloud}
+            local = {**defaults, **local}
+            base = {**defaults, **base}
+            merged, conflicts = {}, []
+            for key in SYNC_KEYS:
+                if local[key] == cloud[key] or cloud[key] == base[key]:
+                    merged[key] = local[key]
+                elif local[key] == base[key]:
+                    merged[key] = cloud[key]
+                else:
+                    conflicts.append(key)
+            if conflicts:
+                raise SyncConflict(conflicts, cloud, revision)
+            needs_upload = merged != cloud
+        if needs_upload:
+            result = self.request('/rest/v1/rpc/bol_save_preferences',
+                                  {'new_payload': merged, 'expected_revision': revision}, self.access_token())
+            if type(result) is not int:
+                raise ValueError('Unexpected sync response. Check the database migration.')
+            revision = result
+        return merged, revision
 
     def mark_synced(self):
         self.session['last_sync'] = time.strftime('%Y-%m-%d %H:%M')
@@ -232,3 +270,9 @@ class AccountClient:
             self.session = {}
         if error:
             raise ValueError('Signed out on this device. Could not revoke the remote session; it may remain valid until it expires.') from None
+
+
+class SyncConflict(ValueError):
+    def __init__(self, fields, cloud, revision):
+        self.fields, self.cloud, self.revision = fields, cloud, revision
+        super().__init__('Changes on both devices need review: ' + ', '.join(fields))

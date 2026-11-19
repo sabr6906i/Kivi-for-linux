@@ -1,6 +1,6 @@
 # Bol accounts on Supabase
 
-Bol uses Supabase Auth for passwordless email-link/code accounts and Postgres for a private preference document per account. No separately hosted Python server, paid hosting commitment, or database password is required in the desktop app. Nothing is deployed until you create and configure a Supabase project.
+Bol uses Supabase Auth for passwordless email-link/code accounts and Postgres for a private preference document per account. No separately hosted Python server, paid hosting commitment, or database password is required in the desktop app. The public build bundles the Bol project URL and publishable key; users only sign in. The setup below is for maintainers creating a different project, not for ordinary users.
 
 ## Project setup
 
@@ -18,9 +18,9 @@ Bol uses Supabase Auth for passwordless email-link/code accounts and Postgres fo
    Keep email verification enabled. The `/otp` endpoint creates new accounts and sends a code; `/verify` verifies it before a session is stored. Both default magic links and numeric codes work with the desktop sign-in flow. A link already opened in a browser may have been consumed; request a fresh email if needed.
 5. Configure **custom SMTP** for emails to real app users. Supabase's default sender is restricted to authorized project-team addresses and has tight limits. Test with your own project-member email first. Review Supabase's authentication rate limits before opening signups publicly.
 6. Get the **Project URL** from Project Settings / Connect and the **publishable key** (`sb_publishable_…`) from **Settings → API Keys**. Do not use a secret key, a service-role key, or a database connection string. Bol intentionally rejects admin and legacy JWT keys.
-7. In Bol, open **Profile & settings → Your profile → Bol account → Cloud project setup**. Enter the project URL and publishable key, then click **Save cloud connection**.
+7. For a custom developer project, start a fresh Bol workspace with `BOL_DEVELOPER_MODE=1 bol settings`, then open **Profile & settings → Your profile → Bol account → Cloud project setup**. Enter the project URL and publishable key, then click **Save cloud connection**.
 8. Click **Sign in**, enter your email, request the email, and paste its original sign-in link or enter its numeric code in Bol. No password is stored.
-9. On the first device, save settings and choose **Upload this device**. On another device, configure the same project, sign in with the same email, and choose **Restore from cloud**. Review the summary before applying it.
+9. Save settings on the first device. They sync automatically after sign-in and on save, with a background check every 45 seconds while the workspace is open (including when hidden). Sign in to the same account on another device to restore them. Users can pause **Automatic sync**, run **Sync now**, or use **Sync recovery** for explicit uploads/restores. No per-user project setup is required.
 
 The publishable key can ship with a desktop app; access control comes from the signed-in user's JWT and database policies. Keep Supabase secret keys out of the app and repository. Existing speech/writing API keys still belong to each user; a Bol account does not grant or bill provider access.
 
@@ -30,9 +30,9 @@ The publishable key can ship with a desktop app; access control comes from the s
 - Polish and voice-edit review preferences, writing rules and per-app writing instructions.
 - Vocabulary, spelling corrections, and snippets.
 
-Sync is manual. History, generated audio, microphone/shortcuts, local model paths, provider credentials, and account tokens are excluded. Cloud preferences are private through RLS, not end-to-end encrypted; the Supabase project operator can access the database. Signing out does not delete local preferences or isolate the existing workspace for another person.
+Sync is automatic after sign-in, on save, and every 45 seconds while the workspace is open. It pauses for unsaved edits, never replaces text being edited, and retries when offline. Closing the workspace stops its timer; reopening resumes sync. History, generated audio, microphone/shortcuts, local model paths, provider credentials, and account tokens are excluded. Cloud preferences are private through RLS, not end-to-end encrypted; the Supabase project operator can access the database. Signing out does not delete local preferences or isolate the existing workspace for another person.
 
-Uploads compare a saved revision with the server's current revision. If another device already uploaded changes, the upload fails instead of overwriting them. Restore the cloud version, make your edits again, then upload. Restore replaces the synced fields; it does not merge dictionaries. Canceling the restore preview leaves local settings and the saved revision unchanged.
+Automatic sync uses the last synced preferences as a three-way merge baseline. Changes to different fields merge automatically; changes to the same field pause sync and show **Review changes**. On a new device with no baseline, default preferences serve as the starting point; existing customizations are preserved and conflicts are reviewed. Users can choose this device’s version or review the cloud snapshot. Revision-checked writes prevent silent overwrites when another device uploads concurrently. Manual restore replaces the synced fields. Canceling its preview leaves local settings and the saved revision unchanged.
 
 ## Sessions
 
@@ -46,6 +46,6 @@ python -m unittest discover -s tests -q
 BOL_TEST_POSTGRES=1 python -m unittest discover -s tests -p test_account_database.py -v
 ```
 
-The integration checks exercise actual Postgres policies with an emulated Supabase `auth.uid()` context: cross-user reads/writes, anonymous requests, forbidden payload fields, and stale revisions. They do not test email delivery or a hosted Supabase project. Before release, test two real accounts against your project, email delivery, sign-out, and a two-device restore. No hosted project has been provisioned by this repository.
+The integration checks exercise actual Postgres policies with an emulated Supabase `auth.uid()` context: cross-user reads/writes, anonymous requests, forbidden payload fields, and stale revisions. They do not test email delivery or a hosted Supabase project. Before release, test two real accounts against your project, email delivery, sign-out, and a two-device restore. The public build points to the configured Bol project; automated tests use fake sessions or an isolated PostgreSQL instance, never real users’ accounts.
 
 References: [Email OTP](https://supabase.com/docs/guides/auth/auth-email-passwordless), [RLS](https://supabase.com/docs/guides/database/postgres/row-level-security), [publishable keys](https://supabase.com/docs/guides/getting-started/api-keys), [custom SMTP](https://supabase.com/docs/guides/auth/auth-smtp).
