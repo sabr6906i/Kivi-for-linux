@@ -35,7 +35,7 @@ On the development Hyprland/Wayland host on 2026-11-19:
 - RemoteDesktop and Clipboard portal interfaces **not advertised**.
 - `flatpak` and `flatpak-builder` not installed.
 
-An advertised interface is not proof of permission or correct behavior. The probe performs introspection only: it does not record audio, request input access, install anything, or create portal sessions. Native GNOME/KDE desktop testing and a sandbox build are still required.
+An advertised interface is not proof of permission or correct behavior. The probe performs introspection only: it does not record audio, request input access, install anything, or create portal sessions. Full GNOME/KDE desktop audio/input testing and a sandbox build are still required; native-package nested compositor smoke checks do not validate a Flatpak.
 
 ## Release gates
 

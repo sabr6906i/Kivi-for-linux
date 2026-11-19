@@ -28,7 +28,7 @@ The app is an early implementation of these workflows, not a claim of complete K
 
 Download the `.pkg.tar.zst` (Arch), `.deb` (Ubuntu/Debian), or `.noarch.rpm` (Fedora) from [GitHub Releases](https://github.com/sabr6906i/Kivi-for-linux/releases). The first preview is `v0.1.0-alpha.1`.
 
-See [package installation/build instructions](docs/PACKAGES.md), [Arch release instructions](packaging/ARCH.md), and the [desktop support matrix](docs/DESKTOPS.md). GNOME/KDE Wayland use clipboard delivery with explicit GTK Copy and copy-first voice editing; Hyprland retains automatic insertion. Xvfb smoke checks simulate desktop metadata and are not real GNOME/KDE session certification. Flatpak is an [investigation](packaging/flatpak/README.md), not a released sandbox package.
+See [package installation/build instructions](docs/PACKAGES.md), [Arch release instructions](packaging/ARCH.md), and the [desktop support matrix](docs/DESKTOPS.md). GNOME/KDE Wayland use clipboard delivery with explicit GTK Copy and copy-first voice editing; Hyprland retains automatic insertion. The package pipeline runs Xvfb smoke checks; separate real nested GNOME Shell/KWin checks also pass. These do not certify physical microphone use, global shortcuts, cross-app clipboard, or full desktop sessions. Flatpak is an [investigation](packaging/flatpak/README.md), not a released sandbox package.
 
 The project is [MIT licensed](LICENSE). Developer builds still support the source install below.
 

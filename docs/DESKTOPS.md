@@ -41,7 +41,12 @@ GNOME custom bindings are scoped to Bol-owned paths, preserve unrelated custom s
 - Mocked X11 contracts: window IDs, xclip stdin, xdotool key/focus commands.
 - Mocked GNOME settings contracts: independent Bol paths, conflict detection, rollback, launcher discovery, rejection of unsupported hold-to-talk.
 
-A real GNOME/Plasma or X11 desktop session is not available on the development host. Microphone permissions, indicator behavior, compositor key conflicts, clipboard ownership, and end-to-end recording/paste still require tests on those actual sessions. These targets are **preview**, not a certified live-tested release.
+The development host uses Hyprland. Additional CI runs now connect Bol to real isolated nested Wayland compositors:
+
+- [GNOME Shell 46.0 check](https://github.com/sabr6906i/Kivi-for-linux/actions/runs/44554729029/job/135667604117): `GdkWaylandDisplay`, welcome screen and GTK own-clipboard round-trip passed.
+- [KWin 5.27.11 check](https://github.com/sabr6906i/Kivi-for-linux/actions/runs/44554104055/job/135665386726): `GdkWaylandDisplay`, welcome screen and GTK own-clipboard round-trip passed.
+
+These are real compositor connections, not only changed environment labels. They are **not full logged-in desktop sessions**. Physical microphone permissions, indicator behavior, global shortcut/key conflicts, cross-app clipboard ownership, and end-to-end recording/paste still require tests on actual user desktop sessions. GNOME/KDE/X11 remain **preview**.
 
 Run `bol doctor` to inspect the detected session and its dependencies. It does not send audio or reveal API keys.
 
