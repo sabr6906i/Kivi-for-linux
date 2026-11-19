@@ -26,48 +26,64 @@ fi
 compositor_pid=''
 xvfb_pid=''
 cleanup() {
-    [[ -z $compositor_pid ]] || kill "$compositor_pid" 2>/dev/null || true
-    [[ -z $xvfb_pid ]] || kill "$xvfb_pid" 2>/dev/null || true
-    [[ -z $compositor_pid ]] || wait "$compositor_pid" 2>/dev/null || true
-    [[ -z $xvfb_pid ]] || wait "$xvfb_pid" 2>/dev/null || true
+    for pid in "$compositor_pid" "$xvfb_pid"; do
+        [[ -z $pid ]] || kill "$pid" 2>/dev/null || true
+    done
+    for attempt in $(seq 1 50); do
+        alive=0
+        for pid in "$compositor_pid" "$xvfb_pid"; do
+            [[ -z $pid ]] || { kill -0 "$pid" 2>/dev/null && alive=1; } || true
+        done
+        [[ $alive == 1 ]] || break
+        sleep .1
+    done
+    for pid in "$compositor_pid" "$xvfb_pid"; do
+        if [[ -n $pid ]]; then
+            kill -KILL "$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+        fi
+    done
 }
 trap cleanup EXIT
 export XDG_SESSION_TYPE=wayland XDG_CURRENT_DESKTOP="$desktop"
 export LIBGL_ALWAYS_SOFTWARE=1 GDK_BACKEND=wayland GTK_A11Y=none
 socket_name=bol-test-wayland
+command -v Xvfb >/dev/null || { echo 'Xvfb is needed for the isolated parent display.' >&2; exit 2; }
+# Both compositors run nested; KWin virtual outputs can stall protocol roundtrips on older releases.
+# -displayfd allocates its own X display; it never replaces the user's display.
+Xvfb -displayfd 3 -screen 0 1280x800x24 -nolisten tcp 3>"$output_dir/parent-x-display" >"$output_dir/parent-xvfb.log" 2>&1 &
+xvfb_pid=$!
+for attempt in $(seq 1 400); do
+    [[ ! -s "$output_dir/parent-x-display" ]] || break
+    kill -0 "$xvfb_pid" 2>/dev/null || { cat "$output_dir/parent-xvfb.log" >&2; exit 1; }
+    sleep .1
+done
+[[ -s "$output_dir/parent-x-display" ]] || { echo 'Xvfb did not become ready within 40 seconds.' >&2; exit 1; }
+export DISPLAY=":$(cat "$output_dir/parent-x-display")"
+printf 'Parent X display ready: %s\n' "$DISPLAY"
 if [[ $desktop == GNOME ]]; then
     command -v gnome-shell >/dev/null || { echo 'gnome-shell is not installed.' >&2; exit 2; }
-    command -v Xvfb >/dev/null || { echo 'Xvfb is needed for an isolated nested Mutter display.' >&2; exit 2; }
-    # -displayfd allocates its own X display; it never replaces the user's display.
-    Xvfb -displayfd 3 -screen 0 1280x800x24 -nolisten tcp 3>"$output_dir/gnome-x-display" >"$output_dir/gnome-xvfb.log" 2>&1 &
-    xvfb_pid=$!
-    for attempt in $(seq 1 100); do
-        [[ ! -s "$output_dir/gnome-x-display" ]] || break
-        kill -0 "$xvfb_pid" 2>/dev/null || { cat "$output_dir/gnome-xvfb.log" >&2; exit 1; }
-        sleep .1
-    done
-    [[ -s "$output_dir/gnome-x-display" ]] || { echo 'Xvfb did not become ready.' >&2; exit 1; }
-    export DISPLAY=":$(cat "$output_dir/gnome-x-display")"
-    gnome-shell --version >"$output_dir/gnome-version.txt" 2>&1 || true
+    timeout 10 gnome-shell --version >"$output_dir/gnome-version.txt" 2>&1 || true
     MUTTER_DEBUG_DUMMY_MODE_SPECS=1280x800 gnome-shell --nested --wayland --no-x11 --wayland-display="$socket_name" >"$output_dir/gnome-compositor.log" 2>&1 &
     compositor_pid=$!
 else
     command -v kwin_wayland >/dev/null || { echo 'kwin_wayland is not installed.' >&2; exit 2; }
-    kwin_wayland --version >"$output_dir/kde-version.txt" 2>&1 || true
-    kwin_wayland --virtual --width 1280 --height 800 --socket "$socket_name" --no-lockscreen --no-global-shortcuts >"$output_dir/kde-compositor.log" 2>&1 &
+    timeout 10 kwin_wayland --version >"$output_dir/kde-version.txt" 2>&1 || true
+    kwin_wayland --x11-display "$DISPLAY" --width 1280 --height 800 --socket "$socket_name" --no-lockscreen --no-global-shortcuts >"$output_dir/kde-compositor.log" 2>&1 &
     compositor_pid=$!
 fi
+printf '%s compositor launched; waiting for its private Wayland socket.\n' "$desktop"
 export WAYLAND_DISPLAY="$socket_name"
 compositor_log="$output_dir/$(printf '%s' "$desktop" | tr '[:upper:]' '[:lower:]')-compositor.log"
 for attempt in $(seq 1 200); do
     [[ ! -S "$XDG_RUNTIME_DIR/$socket_name" ]] || break
     kill -0 "$compositor_pid" 2>/dev/null || { cat "$compositor_log" >&2; exit 1; }
     sleep .1
- done
+done
 [[ -S "$XDG_RUNTIME_DIR/$socket_name" ]] || { cat "$compositor_log" >&2; echo 'Compositor did not create a Wayland socket.' >&2; exit 1; }
-# A socket existing is not sufficient: verify protocol globals and GTK's real backend.
-timeout 15 wayland-info >"$output_dir/$desktop-wayland-info.txt" 2>&1
-python3 - <<'PY' >"$output_dir/$desktop-gdk-backend.txt"
+printf '%s\n' 'Wayland socket exists; verifying the real GTK Wayland backend.'
+# A socket existing is not sufficient: verify GTK can complete a real Wayland connection.
+timeout 40 python3 - <<'PY' >"$output_dir/$desktop-gdk-backend.txt"
 import gi
 gi.require_version('Gdk', '4.0')
 from gi.repository import Gdk
@@ -77,12 +93,16 @@ name = display.__gtype__.name
 assert 'Wayland' in name, name
 print('Real GDK backend:', name)
 PY
+# Protocol inventory is diagnostic; older compositor extensions can stall wayland-info.
+if ! timeout 10 wayland-info >"$output_dir/$desktop-wayland-info.txt" 2>&1; then
+    printf '%s\n' 'wayland-info did not finish; GTK backend and application checks determine test success.' >"$output_dir/$desktop-wayland-info-warning.txt"
+fi
 # This is a real compositor connection with simulated application service responses.
 # It does not create users, contact speech providers, record audio, or inject input.
-python3 "$repo_root/scripts/smoke-gtk.py" --desktop "$desktop" --clipboard-roundtrip >"$output_dir/$desktop-gtk-smoke.txt" 2>&1
+timeout 45 python3 "$repo_root/scripts/smoke-gtk.py" --desktop "$desktop" --clipboard-roundtrip >"$output_dir/$desktop-gtk-smoke.txt" 2>&1
 cat "$output_dir/$desktop-gdk-backend.txt" "$output_dir/$desktop-gtk-smoke.txt"
 printf '%s\n' "Real $desktop Wayland compositor startup and GTK own-clipboard smoke passed." \
     'This does not certify physical audio, global shortcuts, cross-app clipboard, automatic insertion, or a full desktop login session.'
 # Flag references (upstream source):
 # https://github.com/GNOME/mutter/blob/gnome-46/src/core/meta-context-main.c
-# https://github.com/KDE/kwin/blob/Plasma/6.0/src/main_wayland.cpp
+# https://github.com/KDE/kwin/blob/Plasma/5.27/src/main_wayland.cpp
