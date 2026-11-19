@@ -18,6 +18,15 @@ def tar_gz(files, epoch):
     output = io.BytesIO()
     with gzip.GzipFile(fileobj=output, mode='wb', filename='', mtime=epoch) as compressed:
         with tarfile.open(fileobj=compressed, mode='w', format=tarfile.GNU_FORMAT) as archive:
+            # dpkg does not create omitted parent directory entries while unpacking.
+            directories={'.'}
+            for name in files:
+                directories.update(str(parent) for parent in Path(name).parents)
+            for directory in sorted(directories,key=lambda value:(len(Path(value).parts),value)):
+                info=tarfile.TarInfo('./' if directory=='.' else './'+directory+'/')
+                info.type=tarfile.DIRTYPE;info.mode=0o755;info.mtime=epoch
+                info.uid=info.gid=0;info.uname=info.gname='root'
+                archive.addfile(info)
             for name, (contents, mode) in sorted(files.items()):
                 info = tarfile.TarInfo('./' + name)
                 info.size = len(contents)
