@@ -44,7 +44,7 @@ GNOME custom bindings are scoped to Bol-owned paths, preserve unrelated custom s
 The development host uses Hyprland. Additional CI runs now connect Bol to real isolated nested Wayland compositors:
 
 - [GNOME Shell 46.0 check](https://github.com/sabr6906i/Kivi-for-linux/actions/runs/44554729029/job/135667604117): `GdkWaylandDisplay`, welcome screen and GTK own-clipboard round-trip passed.
-- [KWin 5.27.11 check](https://github.com/sabr6906i/Kivi-for-linux/actions/runs/44554104055/job/135665386726): `GdkWaylandDisplay`, welcome screen and GTK own-clipboard round-trip passed.
+- [KWin 5.27.11 check](https://github.com/sabr6906i/Kivi-for-linux/actions/runs/44554729029/job/135667604699): `GdkWaylandDisplay`, welcome screen and GTK own-clipboard round-trip passed.
 
 These are real compositor connections, not only changed environment labels. They are **not full logged-in desktop sessions**. Physical microphone permissions, indicator behavior, global shortcut/key conflicts, cross-app clipboard ownership, and end-to-end recording/paste still require tests on actual user desktop sessions. GNOME/KDE/X11 remain **preview**.
 
