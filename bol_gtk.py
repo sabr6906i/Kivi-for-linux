@@ -750,13 +750,13 @@ class Workspace:
         except Exception as error:self.dialog('Connect your cloud project',str(error));return
         dialog=Gtk.Window(title='Sign in to Bol',transient_for=self.window,modal=True);dialog.add_css_class('bol');dialog.set_default_size(450,340)
         box=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=14);margins(box,26);dialog.set_child(box)
-        box.append(label('Your Bol account','page-title'));box.append(label('We will email a one-time code. New email addresses create an account. No password needed.','muted',True))
+        box.append(label('Your Bol account','page-title'));box.append(label('We will email a sign-in link or code. New email addresses create an account. No password needed.','muted',True))
         email=Gtk.Entry();email.set_placeholder_text('you@example.com');box.append(email)
-        code=Gtk.Entry();code.set_placeholder_text('Code from your email');code.set_input_purpose(Gtk.InputPurpose.DIGITS);code.set_visible(False);box.append(code)
+        code=Gtk.Entry();code.set_placeholder_text('Paste sign-in link or enter email code');code.set_visible(False);box.append(code)
         note=label('','muted',True);box.append(note)
-        send=Gtk.Button(label='Send sign-in code');send.add_css_class('primary');box.append(send)
+        send=Gtk.Button(label='Send sign-in email');send.add_css_class('primary');box.append(send)
         verify=Gtk.Button(label='Verify and sign in');verify.add_css_class('primary');verify.set_visible(False);box.append(verify)
-        resend=Gtk.Button(label='Resend code');resend.set_visible(False);box.append(resend)
+        resend=Gtk.Button(label='Resend email');resend.set_visible(False);box.append(resend)
         state={'busy':False,'alive':True}
         def closed(*args):state['alive']=False
         dialog.connect('close-request',closed)
@@ -767,7 +767,7 @@ class Workspace:
             except Exception as error:note.set_text(str(error));return
             state['busy']=True
             for control in (send,verify,resend,email,code):control.set_sensitive(False)
-            note.set_text('Verifying…' if verify_code else 'Sending code…')
+            note.set_text('Verifying…' if verify_code else 'Sending email…')
             def finished(result,error):
                 if not self.alive:return False
                 if state['alive']:
@@ -777,7 +777,7 @@ class Workspace:
                     elif verify_code:dialog.close()
                     else:
                         code.set_visible(True);verify.set_visible(True);resend.set_visible(True);send.set_visible(False)
-                        note.set_text('Check your inbox for the code. It may take a minute.');code.grab_focus()
+                        note.set_text('Copy the sign-in link from your email and paste it here, or enter its numeric code. Do not open the link first.');code.grab_focus()
                 self.update_account_section('Signed in. Upload this device or restore your cloud preferences.' if not error and verify_code else None)
                 return False
             def worker():

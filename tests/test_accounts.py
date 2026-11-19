@@ -103,3 +103,25 @@ class AccountTests(unittest.TestCase):
     def test_redirect_cannot_forward_credentials(self):
         from bol_accounts import NoRedirect
         with self.assertRaises(ValueError):NoRedirect().redirect_request(None, None, 302, '', {}, 'https://evil.example')
+
+    def test_default_supabase_email_link_is_exchanged_without_following_redirect(self):
+        token = 'a' * 64
+        result = {'access_token': 'a', 'refresh_token': 'r', 'user': {'id': 'id', 'email': 'user@example.com'}}
+        with patch.object(self.client, 'request', return_value=result) as request:
+            self.client.verify_code('user@example.com', self.client.url + '/auth/v1/verify?token=' + token + '&type=magiclink&redirect_to=http://localhost:3000')
+            request.assert_called_once_with('/auth/v1/verify', {'token_hash': token, 'type': 'magiclink'})
+        self.assertTrue(self.client.signed_in)
+
+    def test_email_link_from_another_project_or_unsupported_flow_rejected(self):
+        for link in ('https://evil.example/auth/v1/verify?token=' + 'a'*64 + '&type=magiclink',
+                     self.client.url + '/auth/v1/verify?token=' + 'a'*64 + '&type=recovery',
+                     self.client.url + '/other?token=' + 'a'*64 + '&type=signup'):
+            with self.subTest(link=link), patch.object(self.client, 'request') as request:
+                with self.assertRaises(ValueError):self.client.verify_code('user@example.com', link)
+                request.assert_not_called()
+
+    def test_link_cannot_sign_in_as_a_different_email(self):
+        result = {'access_token': 'a', 'refresh_token': 'r', 'user': {'id': 'id', 'email': 'other@example.com'}}
+        with patch.object(self.client, 'request', return_value=result):
+            with self.assertRaisesRegex(ValueError, 'different email'):self.client.verify_code('user@example.com', '123456')
+        self.assertFalse(self.client.path.exists())

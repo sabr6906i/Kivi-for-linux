@@ -125,9 +125,30 @@ class AccountClient:
         return self.request('/auth/v1/otp', {'email': self.email(email), 'create_user': True})
 
     def verify_code(self, email, code):
-        if not re.fullmatch(r'\d{6,10}', code.strip()):
-            raise ValueError('Enter the numeric code from your email.')
-        result = self.request('/auth/v1/verify', {'email': self.email(email), 'token': code.strip(), 'type': 'email'})
+        email = self.email(email)
+        code = code.strip()
+        if code.startswith('https://'):
+            # Consume only this project's original email link, never follow URLs
+            # or accept access tokens supplied in a browser redirect fragment.
+            self.validate_project()
+            link = urllib.parse.urlsplit(code)
+            project = urllib.parse.urlsplit(self.url)
+            query = urllib.parse.parse_qs(link.query)
+            kind = query.get('type', [''])[0]
+            token_hash = query.get('token_hash', query.get('token', ['']))[0]
+            if (link.scheme != 'https' or link.netloc != project.netloc or
+                    link.path != '/auth/v1/verify' or link.fragment or
+                    kind not in ('magiclink', 'signup', 'email') or
+                    not re.fullmatch(r'[A-Za-z0-9_-]{20,256}', token_hash)):
+                raise ValueError('Paste the original sign-in link from this project’s email, or enter the numeric code.')
+            payload = {'token_hash': token_hash, 'type': kind}
+        else:
+            if not re.fullmatch(r'\d{6,10}', code):
+                raise ValueError('Enter the email code, or paste the original sign-in link from the email.')
+            payload = {'email': email, 'token': code, 'type': 'email'}
+        result = self.request('/auth/v1/verify', payload)
+        if result.get('user', {}).get('email', '').casefold() != email.casefold():
+            raise ValueError('That sign-in link belongs to a different email address. Request a new one for the email you entered.')
         self.accept_session(result)
         return self.session['user']
 
