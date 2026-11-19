@@ -17,6 +17,7 @@ jobs:
         env:
           TEST_DESKTOP: ${{ matrix.desktop }}
         run: |
+          scripts/ci-ubuntu-mirrors.sh
           sudo apt-get update
           sudo apt-get install -y python3-gi gir1.2-gtk-4.0 python3-tk dbus-x11 wayland-utils libgl1-mesa-dri libglx-mesa0 xvfb
           if [ "$TEST_DESKTOP" = GNOME ]; then

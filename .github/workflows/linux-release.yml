@@ -19,6 +19,7 @@ jobs:
       - uses: actions/checkout@v7.0.1
       - name: Install build and headless test dependencies
         run: |
+          scripts/ci-ubuntu-mirrors.sh
           sudo apt-get update
           sudo apt-get install -y python3-gi gir1.2-gtk-4.0 python3-tk pipewire-bin wl-clipboard libnotify-bin ffmpeg xvfb dbus-x11 desktop-file-utils
       - name: Unit tests
