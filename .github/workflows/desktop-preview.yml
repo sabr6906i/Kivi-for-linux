@@ -1,0 +1,38 @@
+name: Real Wayland compositor preview checks
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compositor:
+    name: ${{ matrix.desktop }} Wayland compositor
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        desktop: [GNOME, KDE]
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Install isolated compositor test dependencies
+        env:
+          TEST_DESKTOP: ${{ matrix.desktop }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-gi gir1.2-gtk-4.0 python3-tk dbus-x11 wayland-utils libgl1-mesa-dri libglx-mesa0
+          if [ "$TEST_DESKTOP" = GNOME ]; then
+            sudo apt-get install -y gnome-shell xvfb
+          else
+            sudo apt-get install -y kwin-wayland
+          fi
+      - name: Run real isolated Wayland compositor and GTK smoke
+        env:
+          TEST_DESKTOP: ${{ matrix.desktop }}
+        run: scripts/smoke-wayland-session.sh "$TEST_DESKTOP" dist/desktop-preview
+        timeout-minutes: 3
+      - name: Preserve compositor diagnostics even on failure
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: wayland-preview-${{ matrix.desktop }}
+          path: dist/desktop-preview/
+          if-no-files-found: warn
