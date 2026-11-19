@@ -3,7 +3,7 @@ Bol's first native Linux package preview, distributed under the MIT license.
 ## Downloads
 
 - Arch Linux / Hyprland: `bol-linux-0.1.0alpha1-1-any.pkg.tar.zst`; install with `sudo pacman -U ./bol-linux-0.1.0alpha1-1-any.pkg.tar.zst`.
-- Ubuntu / Debian: `bol-linux_0.1.0~alpha1_all.deb`; install with `sudo apt install './bol-linux_0.1.0~alpha1_all.deb'`.
+- Ubuntu / Debian: `bol-linux_0.1.0.alpha1_all.deb`; install with `sudo apt install './bol-linux_0.1.0.alpha1_all.deb'`.
 - Fedora: the `.noarch.rpm` asset; install with `sudo dnf install ./bol-linux-0.1.0-0.1.alpha1*.noarch.rpm`.
 - Source archive, checksummed `PKGBUILD`, `bol-linux.SRCINFO`, exact `SOURCE_COMMIT`, and `SHA256SUMS` are provided alongside the packages.
 

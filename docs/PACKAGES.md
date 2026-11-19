@@ -13,12 +13,12 @@ SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)" \
   python3 scripts/build-deb.py --version '0.1.0~alpha1' --output dist
 ```
 
-The result is `dist/bol-linux_0.1.0~alpha1_all.deb`. Its architecture is `all` because it ships Python source rather than native binaries. Debian prerequisites are declared in the package, including GTK4/PyGObject, PipeWire tools, wl-clipboard, notifications, and ffmpeg.
+The result is `dist/bol-linux_0.1.0.alpha1_all.deb`. Its architecture is `all` because it ships Python source rather than native binaries. Debian prerequisites are declared in the package, including GTK4/PyGObject, PipeWire tools, wl-clipboard, notifications, and ffmpeg.
 
 Install on a Debian/Ubuntu machine with a graphical user session:
 
 ```sh
-sudo apt install ./bol-linux_0.1.0~alpha1_all.deb
+sudo apt install ./bol-linux_0.1.0.alpha1_all.deb
 bol settings
 ```
 
@@ -27,8 +27,8 @@ bol settings
 Inspect without installing:
 
 ```sh
-dpkg-deb --info dist/bol-linux_0.1.0~alpha1_all.deb
-dpkg-deb --contents dist/bol-linux_0.1.0~alpha1_all.deb
+dpkg-deb --info dist/bol-linux_0.1.0.alpha1_all.deb
+dpkg-deb --contents dist/bol-linux_0.1.0.alpha1_all.deb
 ```
 
 On a non-Debian build host, `ar t package.deb` and `ar p package.deb data.tar.gz | tar -tzf -` inspect the same archive. The builder includes deterministic gzip/tar/ar metadata and a `md5sums` control member. Use the same `SOURCE_DATE_EPOCH` and source tree for reproducible artifacts.

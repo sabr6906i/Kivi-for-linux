@@ -91,7 +91,9 @@ def main():
     checksums = ''.join(hashlib.md5(content, usedforsecurity=False).hexdigest() + '  ' + name + '\n' for name, (content, _) in sorted(files.items()))
     control_files = {'control': (control.encode(), 0o644), 'md5sums': (checksums.encode(), 0o644)}
     args.output.mkdir(parents=True, exist_ok=True)
-    destination = args.output / f'bol-linux_{args.version}_all.deb'
+    # GitHub release hosting normalizes '~'; keep the artifact filename stable.
+    artifact_version=args.version.replace('~','.')
+    destination = args.output / f'bol-linux_{artifact_version}_all.deb'
     contents = b'!<arch>\n'
     for name, content in [('debian-binary', b'2.0\n'), ('control.tar.gz', tar_gz(control_files, epoch)), ('data.tar.gz', tar_gz(files, epoch))]:
         contents += ar_member(name, content, epoch)
