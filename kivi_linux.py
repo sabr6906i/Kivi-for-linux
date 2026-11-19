@@ -22,6 +22,7 @@ import uuid
 
 from bol_features import DEFAULTS, History, expand, write
 from bol_providers import validate_speech, transcribe_local, transcribe_api
+import bol_desktop as desktop
 
 CONFIG = Path(os.environ.get('XDG_CONFIG_HOME', str(Path.home() / '.config'))) / 'bol-linux'
 RUNTIME = Path(os.environ.get('XDG_RUNTIME_DIR', f'/tmp/bol-{os.getuid()}')) / 'bol-linux'
@@ -111,41 +112,46 @@ def transcribe(path, settings, cancelled=lambda: False, on_process=lambda p: Non
 
 
 def active_window():
-    result = subprocess.run(['hyprctl', '-j', 'activewindow'], capture_output=True, text=True, check=True, timeout=3)
-    return json.loads(result.stdout)
+    return desktop.active_window()
 
 
 def shortcut(key, mods='CTRL'):
-    # Restrict interpolation to JSON-escaped literals, also valid Lua strings here.
-    code = 'hl.dsp.send_shortcut({ mods = ' + json.dumps(mods) + ', key = ' + json.dumps(key) + ' })'
-    result = subprocess.run(['hyprctl', 'dispatch', code], capture_output=True, text=True, timeout=3)
-    if result.returncode or result.stdout.strip() != 'ok':
-        raise RuntimeError('Hyprland rejected the keyboard shortcut.')
+    return desktop.shortcut(key, mods)
 
 
 def copy_text(text):
-    subprocess.run(['wl-copy', '--', text], check=True, timeout=3)
+    return desktop.copy_text(text)
+
+
+def read_clipboard():
+    return desktop.read_clipboard()
+
+
+def focus_window(target):
+    return desktop.focus_window(target)
 
 
 def selection_for(target):
     """Explicit Ctrl+C capture with sentinel; never mistake old clipboard text for a selection."""
-    if active_window().get('address') != target:
+    if not target or active_window().get('address') != target:
         return ''
-    old = subprocess.run(['wl-paste', '--no-newline'], capture_output=True, timeout=2).stdout
+    try:old = read_clipboard()
+    except ValueError:old = b''
     sentinel = 'bol-selection-' + uuid.uuid4().hex
     copy_text(sentinel)
     try:
         shortcut('C')
         for _ in range(12):
             time.sleep(.04)
-            result = subprocess.run(['wl-paste', '--no-newline'], capture_output=True, timeout=2)
-            if result.returncode == 0 and result.stdout != sentinel.encode():
+            try:copied = read_clipboard()
+            except ValueError:continue
+            if copied != sentinel.encode():
                 if active_window().get('address') == target:
-                    return result.stdout.decode('utf-8', errors='replace')[:24000]
+                    return copied.decode('utf-8', errors='replace')[:24000]
                 return ''
         return ''
     finally:
-        subprocess.run(['wl-copy'], input=old, timeout=3, check=True)
+        copy_text(old)
 
 
 class Service:
@@ -233,7 +239,7 @@ class Service:
                 if self.recorder:
                     self.finish(self.generation)
                 return self.status()
-            if command not in ['toggle', 'start', 'edit']:
+            if command not in ['toggle', 'start', 'edit', 'edit-clipboard']:
                 return {'error': 'Unknown command'}
             if self.state in ['Transcribing', 'Writing', 'Review']:
                 notify('An edit is waiting in Bol for review.' if self.state=='Review' else 'Still processing. F9 cancels this request.')
@@ -245,20 +251,29 @@ class Service:
             settings = config()
             try:
                 validate_speech(settings)
-                if command == 'edit' and settings.get('speech_provider') == 'whispercpp' and not settings.get('local_speech_writing'):
+                copied_source = None
+                if command == 'edit' and not desktop.desktop_info()['selection_capture']:
+                    raise ValueError('This Wayland desktop cannot capture another app’s selection. Copy the text, then run bol edit-clipboard; the reviewed result will be copied for you to paste.')
+                if command == 'edit-clipboard':
+                    copied_source = payload['source'] if 'source' in payload else read_clipboard().decode('utf-8', errors='replace')
+                    if not isinstance(copied_source,str):raise ValueError('The copied source must be text.')
+                    if not copied_source.strip():raise ValueError('Copy the text you want to edit before running bol edit-clipboard.')
+                    if len(copied_source)>24000:raise ValueError('Copy at most 24000 characters for voice editing.')
+                if command in ('edit', 'edit-clipboard') and settings.get('speech_provider') == 'whispercpp' and not settings.get('local_speech_writing'):
                     raise ValueError('Enable AI writing with local speech in Writing settings to use voice editing.')
             except ValueError as error:
                 self.error = str(error)
                 notify(self.error)
                 return self.status()
-            for binary in ['pw-record', 'wl-copy', 'wl-paste', 'hyprctl']:
+            for binary in desktop.recording_dependencies():
                 if not shutil.which(binary):
                     raise RuntimeError(f'Missing dependency: {binary}')
             active = active_window()
             self.target, self.app = active.get('address', ''), active.get('class', '')
-            self.mode = 'edit' if command == 'edit' else 'dictate'
+            self.mode = 'edit' if command in ('edit', 'edit-clipboard') else 'dictate'
             terminal = any(name in self.app.casefold() for name in ['kitty', 'alacritty', 'foot', 'wezterm', 'konsole', 'terminal'])
-            self.selection = selection_for(self.target) if self.mode == 'edit' and not terminal else ''
+            self.selection = copied_source if copied_source is not None else selection_for(self.target) if self.mode == 'edit' and not terminal else ''
+            if copied_source is not None:self.target = ''  # Explicit clipboard edits are never inserted into an inferred source window.
             self.settings = settings
             self.directory = tempfile.TemporaryDirectory(prefix='recording-', dir=RUNTIME)
             self.path = Path(self.directory.name) / 'speech.wav'
@@ -340,13 +355,8 @@ class Service:
         if generation!=self.generation:return
         self.latest, self.original = text, original
         self.latest_metadata = {'app': app, 'mode': mode, 'created': datetime.now(timezone.utc).isoformat()}
-        if focus:
-            clients=json.loads(subprocess.check_output(['hyprctl','-j','clients'],text=True,timeout=3))
-            if any(client.get('address')==target for client in clients):
-                selector='address:'+target
-                code='hl.dsp.focus({ window = '+json.dumps(selector)+' })'
-                subprocess.run(['hyprctl','dispatch',code],check=True,capture_output=True,timeout=3)
-                time.sleep(.15)
+        if focus and target and focus_window(target):
+            time.sleep(.15)
         if settings.get('history_enabled'):
             History(CONFIG,settings.get('history_retention_days',0)).add(app, mode, original, text)
         same_window = target and active_window().get('address') == target
@@ -354,7 +364,13 @@ class Service:
         terminal = any(name in app.casefold() for name in ['kitty', 'alacritty', 'foot', 'wezterm', 'konsole', 'terminal'])
         if mode == 'edit' and same_window and not terminal:
             selection_unchanged = selection_for(target) == selection
-        copy_text(text)
+        try:copy_text(text)
+        except (OSError, subprocess.SubprocessError, RuntimeError, ValueError):
+            self.state = 'Ready'
+            self.error = warning or 'Clipboard access is unavailable on this desktop. Open Bol History and use Copy, then paste into your app.'
+            self.outcome = 'Text ready in Bol — use History → Copy'
+            notify(self.error)
+            return
         same_window = same_window and active_window().get('address') == target
         if settings.get('auto_paste', True) and same_window and selection_unchanged:
             # Electron editors and terminals often use different paste shortcuts.
@@ -365,7 +381,7 @@ class Service:
             shortcut('V', 'CTRL SHIFT' if terminal else 'CTRL')
             self.outcome = 'Paste shortcut sent'
         else:
-            self.outcome = 'Copied — paste manually (focus or selection changed)' if not same_window or not selection_unchanged else 'Copied'
+            self.outcome = 'Copied — paste into your app' if not target else 'Copied — paste manually (focus or selection changed)' if not same_window or not selection_unchanged else 'Copied'
         self.state, self.error = 'Ready', warning
         notify(warning or self.outcome)
 
@@ -451,7 +467,7 @@ def indicator():
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', nargs='?', default='settings', choices=['settings', 'toggle', 'start', 'stop', 'edit', 'cancel', 'status', 'result', 'copy-last', 'daemon', 'doctor', 'indicator'])
+    parser.add_argument('command', nargs='?', default='settings', choices=['settings', 'toggle', 'start', 'stop', 'edit', 'edit-clipboard', 'cancel', 'status', 'result', 'copy-last', 'daemon', 'doctor', 'indicator'])
     args = parser.parse_args()
     if args.command == 'daemon':
         daemon()
@@ -460,7 +476,9 @@ def main():
     elif args.command == 'settings':
         gui()
     elif args.command == 'doctor':
-        for name in ['python', 'pw-record', 'wl-copy', 'wl-paste', 'hyprctl', 'notify-send']:
+        print('Desktop:', desktop.desktop_info()['name'], '('+desktop.desktop_info()['session']+')')
+        print(desktop.desktop_info()['summary'])
+        for name in ['python', 'notify-send'] + desktop.recording_dependencies():
             print(f'{name}: {shutil.which(name) or "MISSING"}')
         print('API key:', 'configured' if config().get('api_key') else 'not configured')
         print('Speech provider:', config().get('speech_provider', 'sarvam'))
@@ -469,6 +487,8 @@ def main():
         binary, model = detect_whisper()
         print('Detected whisper.cpp:', binary or 'not found')
         print('Detected Whisper model:', model or 'not found')
+        if desktop.desktop_info()['backend']=='wayland':
+            for name in ['wl-copy','wl-paste']:print(f'{name} (optional background clipboard): {shutil.which(name) or "unavailable; use Bol Copy"}')
         print('Session:', os.environ.get('XDG_SESSION_TYPE', 'unknown'))
     else:
         print(json.dumps(request(args.command)))

@@ -1,6 +1,6 @@
 # Bol — a Linux voice workspace
 
-An independent voice typing and writing app for **Hyprland / Wayland**. Inspired by Kivi's workflow; not affiliated with Sarvam or Kivi. Supports Sarvam, local whisper.cpp, ElevenLabs through official CLI browser sign-in, and configurable compatible speech/writing APIs. Local dictation needs no API key.
+An independent voice typing and writing app with primary **Hyprland / Wayland** support and **GNOME/KDE clipboard-mode previews**. Native Arch, Debian/Ubuntu and Fedora packages are available through the Linux prerelease workflow; package availability is separate from compositor compatibility. Inspired by Kivi's workflow; not affiliated with Sarvam or Kivi. Supports Sarvam, local whisper.cpp, ElevenLabs through official CLI browser sign-in, and configurable compatible speech/writing APIs. Local dictation needs no API key.
 
 ## Features
 
@@ -23,6 +23,14 @@ An independent voice typing and writing app for **Hyprland / Wayland**. Inspired
 - Shortcut configuration with conflict checking and an optional hold-to-talk mode.
 
 The app is an early implementation of these workflows, not a claim of complete Kivi feature or quality parity. See the limitations below.
+
+## Native Linux packages
+
+Download the `.pkg.tar.zst` (Arch), `.deb` (Ubuntu/Debian), or `.noarch.rpm` (Fedora) from [GitHub Releases](https://github.com/sabr6906i/Kivi-for-linux/releases). The first preview is `v0.1.0-alpha.1`.
+
+See [package installation/build instructions](docs/PACKAGES.md), [Arch release instructions](packaging/ARCH.md), and the [desktop support matrix](docs/DESKTOPS.md). GNOME/KDE Wayland use clipboard delivery with explicit GTK Copy and copy-first voice editing; Hyprland retains automatic insertion. Xvfb smoke checks simulate desktop metadata and are not real GNOME/KDE session certification. Flatpak is an [investigation](packaging/flatpak/README.md), not a released sandbox package.
+
+The project is [MIT licensed](LICENSE). Developer builds still support the source install below.
 
 ## Install
 
@@ -150,7 +158,7 @@ Bol implements the corresponding basic workflows using public APIs, with these r
 - Corrections are remembered explicitly through the Vocabulary tab or Remember correction button. Passive learning from arbitrary edits is not implemented.
 - Voice formatting produces plain text/Markdown; it cannot reliably apply rich formatting such as actual bold inside every editor.
 - It uses selection capture and keyboard paste. Browser fields, unusual editors, XWayland apps and terminals can behave differently. Selection capture is intentionally skipped in terminals to avoid Ctrl+C interrupting a command; voice editing there drafts from speech.
-- No screen-context reading, live streaming captions, system-tray menu, automatic updater, offline model or cross-compositor packaging yet. Account preferences sync automatically after sign-in, on save, and every 45 seconds while the workspace is open. Developer cloud settings are hidden unless `BOL_DEVELOPER_MODE=1` is set.
+- No screen-context reading, live streaming captions, system-tray menu, automatic updater, bundled offline model or automatic updater yet. GNOME/KDE clipboard integration is preview; native packages do not certify desktop behavior. Account preferences sync automatically after sign-in, on save, and every 45 seconds while the workspace is open. Developer cloud settings are hidden unless `BOL_DEVELOPER_MODE=1` is set.
 - Model output quality and latency are not guaranteed to match Kivi's private prompts or services.
 
 ## Development

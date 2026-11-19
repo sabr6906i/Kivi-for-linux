@@ -2,6 +2,8 @@
 import json
 from pathlib import Path
 import re
+import shutil
+import shlex
 import subprocess
 import threading
 from bol_features import LANGUAGES, MODES, History
@@ -47,7 +49,9 @@ def apply_shortcuts(settings):
     old = path.read_text()
     lines = [line for line in old.splitlines() if not ('hl.bind(' in line and ('Bol:' in line or 'bol toggle' in line or 'bol cancel' in line)) and line != '-- Bol voice dictation']
     def binding(key, command, description, options=''):
-        return f'hl.bind({json.dumps(key)}, hl.dsp.exec_cmd("$HOME/.local/bin/bol {command}"), {{ description = "Bol: {description}"{options} }})'
+        launcher = shutil.which('bol') or str(Path.home() / '.local/bin/bol')
+        command_line = json.dumps(shlex.quote(launcher) + ' ' + command)
+        return f'hl.bind({json.dumps(key)}, hl.dsp.exec_cmd({command_line}), {{ description = "Bol: {description}"{options} }})'
     lines += ['', '-- Bol voice dictation']
     if settings.get('hold_to_talk'):
         lines += [binding(settings['record_key'], 'start', 'hold to dictate'), binding(settings['record_key'], 'stop', 'finish dictation', ', release = true')]

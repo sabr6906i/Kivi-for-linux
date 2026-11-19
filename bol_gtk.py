@@ -15,7 +15,8 @@ from bol_providers import SPEECH_PROVIDERS, WRITING_PROVIDERS, detect_whisper, v
 from bol_audio import synthesize, suggest_delivery, STYLE_PRESETS, TTS_LANGUAGES, TTS_VOICES
 from bol_themes import THEMES, is_light, overrides, light_accents
 from bol_accounts import AccountClient, SYNC_KEYS, preferences, SyncConflict
-from bol_ui import parse_pairs, format_pairs, apply_shortcuts
+from bol_ui import parse_pairs, format_pairs
+from bol_desktop import desktop_info, apply_shortcuts, open_app_classes, open_shortcut_settings
 
 CSS = b'''
 window.bol  { background: #090909; color: #ececec; font-family: 'Noto Sans', sans-serif; font-size: 13px; }
@@ -290,7 +291,7 @@ class Workspace:
         self.audio_directory=None
         self.audio_player=None
         self.audio_style_generation=0
-        self.app=Gtk.Application(application_id='io.github.bol.Workspace', flags=Gio.ApplicationFlags.DEFAULT_FLAGS if single_instance else Gio.ApplicationFlags.NON_UNIQUE)
+        self.app=Gtk.Application(application_id='io.github.sabr6906i.Bol', flags=Gio.ApplicationFlags.DEFAULT_FLAGS if single_instance else Gio.ApplicationFlags.NON_UNIQUE)
         self.app.connect('activate', self.activate)
 
     def changed(self,*args):
@@ -939,7 +940,7 @@ class Workspace:
         title=label('Your voice.\nYour workspace.','page-title',True);box.append(title)
         box.append(label('Dictate naturally, refine words by voice, and turn your text into speech. Start with a Bol account or keep working on this device.','muted',True))
         features=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=18)
-        for icon,title,hint in [('microphone','Speak instead of typing','Dictation and voice editing for your Linux workspace.'),('refresh','Your preferences, everywhere','Sign in to sync your theme, vocabulary, snippets, and writing preferences.'),('vocabulary','Choose where speech runs','Connect a speech service or use your local Whisper model.')]:
+        for icon,title,hint in [('microphone','Speak instead of typing',desktop_info()['summary']),('refresh','Your preferences, everywhere','Sign in to sync your theme, vocabulary, snippets, and writing preferences.'),('vocabulary','Choose where speech runs','Connect a speech service or use your local Whisper model.')]:
             row=Gtk.Box(spacing=14);row.append(svg_icon(icon,24));words=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=4);words.append(label(title,'row-title'));words.append(label(hint,'muted',True));row.append(words);features.append(row)
         box.append(features)
         sign=action_button('Sign in & sync','profile');sign.add_css_class('primary');box.append(sign)
@@ -1028,8 +1029,21 @@ class Workspace:
         try:Gio.AppInfo.launch_default_for_uri('https://dashboard.sarvam.ai/key-management',None)
         except Exception as error:self.dialog('Could not open browser',str(error))
 
+    def setup_desktop_shortcuts(self):
+        if desktop_info()['shortcut_setup'] in ('hyprland','gnome'):
+            settings=self.core.config()
+            if desktop_info()['shortcut_setup']!='hyprland':settings['hold_to_talk']=False
+            apply_shortcuts(settings)
+            self.dialog('Shortcuts ready','Your Bol shortcuts have been installed. You can change them on the Shortcuts page.')
+        else:open_shortcut_settings()
+
     def build_general(self):
-        page=self.pages['General'];group=self.section(page,'Speech recognition')
+        page=self.pages['General']
+        desktop=desktop_info()
+        group=self.section(page,'Desktop integration')
+        button=Gtk.Button(label='Set up shortcuts');button.connect('clicked',lambda b:self.action(self.setup_desktop_shortcuts))
+        self.row(group,desktop['name'],desktop['summary'],button)
+        group=self.section(page,'Speech recognition')
         self.choice(group,'speech_provider','Speech engine','Configure keys and model paths in Providers.',SPEECH_PROVIDERS,{'sarvam':'Sarvam cloud','whispercpp':'Local whisper.cpp','compatible':'Compatible speech API','elevenlabs':'ElevenLabs · browser sign-in'})
         self.widgets['speech_provider'].connect('notify::selected',lambda *args:self.update_provider_sections())
         group=self.section(page,'Speech')
@@ -1042,7 +1056,9 @@ class Workspace:
         duration=Gtk.SpinButton.new_with_range(5,300,5);duration.set_value(self.settings.get('record_seconds',120));duration.connect('value-changed',self.changed);self.widgets['record_seconds']=duration
         self.row(group,'Recording limit','Maximum seconds before Bol finishes automatically.',duration)
         group=self.section(page,'Workflow')
-        self.toggle(group,'auto_paste','Automatic paste','Insert the result into your original focused app.')
+        self.toggle(group,'auto_paste','Automatic paste','Insert the result into your original focused app.' if desktop_info()['automatic_insertion'] else 'Unavailable on this desktop. Copy from History and paste into your app.')
+        if not desktop_info()['automatic_insertion']:
+            self.widgets['auto_paste'].set_active(False);self.widgets['auto_paste'].set_sensitive(False)
         self.toggle(group,'history_enabled','Save history','Keep up to 200 results locally on this computer.')
         self.choice(group,'history_retention_days','Keep saved history','Expired results are deleted when history is read or written.',[0,1,7,30],{0:'Up to 200 results',1:'24 hours',7:'7 days',30:'30 days'})
         page.append(label('Local Whisper keeps audio on your computer. Cloud engines send audio to the selected provider. AI writing sends text and preferences to its configured endpoint.','muted',True))
@@ -1125,6 +1141,9 @@ class Workspace:
         page=self.pages['Writing'];group=self.section(page,'Dictation')
         self.toggle(group,'polish','Polish with AI','Remove fillers, resolve corrections, and format your words.')
         self.toggle(group,'review_edits','Review voice edits before inserting','Read or change the proposed edit, then approve or discard it.')
+        if not desktop_info()['selection_capture']:
+            edit=action_button('Voice-edit copied text','writing');edit.connect('clicked',lambda b:self.voice_edit_clipboard())
+            self.row(group,'Edit copied text','Copy text in your app, click to speak an instruction, then click again to finish. Review the result and copy it back.',edit)
         group=self.section(page,'Your writing style','For example: British spelling, concise sentences, and preserve Punjabi.')
         self.editor(group,'writing_rules',self.settings.get('writing_rules',''))
         group=self.section(page,'App preferences','One exact app class => instruction per line. Example: Chatgpt => Preserve code identifiers.')
@@ -1242,7 +1261,7 @@ class Workspace:
         card.append(bottom);return card
 
     def copy_history_row(self,row):
-        self.core.copy_text(row['result']);self.status.set_text('Transcript copied')
+        self.copy_text(row['result']);self.status.set_text('Transcript copied')
 
     def transcript_details(self,row):
         dialog=Gtk.Window(title='Transcript',transient_for=self.window,modal=True);dialog.add_css_class('bol');dialog.set_default_size(660,610)
@@ -1263,7 +1282,7 @@ class Workspace:
         final.connect('toggled',version);original.connect('toggled',version)
         actions=Gtk.Box(spacing=8)
         def copy_preview(button):
-            text=buffer.get_text(buffer.get_start_iter(),buffer.get_end_iter(),True);self.core.copy_text(text);self.status.set_text('Transcript copied')
+            text=buffer.get_text(buffer.get_start_iter(),buffer.get_end_iter(),True);self.copy_text(text);self.status.set_text('Transcript copied')
         def export_preview(button):
             self.buffers['result'].set_text(buffer.get_text(buffer.get_start_iter(),buffer.get_end_iter(),True));self.export_results(False,dialog)
         copy=action_button('Copy text','copy');copy.add_css_class('primary');copy.connect('clicked',copy_preview);actions.append(copy)
@@ -1277,9 +1296,11 @@ class Workspace:
         for key,title,hint in [('record_key','Dictate','Start and finish recording.'),('edit_key','Voice edit','Rewrite selected text or draft from an instruction.'),('cancel_key','Cancel','Stop recording and discard the pending result.')]:
             self.entry(group,key,title,hint)
         group=self.section(page,'Behavior')
-        self.toggle(group,'hold_to_talk','Hold to talk','Hold the dictation key to record. Release it to finish.')
-        page.append(label('Use F1–F12, optionally with CTRL +, ALT +, SHIFT + or SUPER +. Saving checks for conflicts and applies shortcuts to Hyprland.','muted',True))
-        page.append(label('Voice edit: select text, press your edit key, speak an instruction, then press it again. Keep the same app focused while Bol processes it.','muted',True))
+        self.toggle(group,'hold_to_talk','Hold to talk','Hold the dictation key to record. Release it to finish.' if desktop_info()['backend']=='hyprland' else 'Use toggle recording on this desktop; key-release integration is unavailable.')
+        if desktop_info()['backend']!='hyprland':
+            self.widgets['hold_to_talk'].set_active(False);self.widgets['hold_to_talk'].set_sensitive(False)
+        page.append(label('Use F1–F12, optionally with CTRL +, ALT +, SHIFT + or SUPER +. Hyprland/GNOME check supported shortcut conflicts. On KDE, assign the commands in System Settings.','muted',True))
+        page.append(label('Voice edit: on Hyprland select text; on GNOME/KDE Wayland copy it first and use Voice-edit copied text in Writing. Record an instruction, finish, and review the result.','muted',True))
 
     def text(self,key):
         buffer=self.buffers[key];return buffer.get_text(buffer.get_start_iter(),buffer.get_end_iter(),True)
@@ -1441,11 +1462,32 @@ class Workspace:
             d.destroy()
         dialog.connect('response',response);dialog.present()
 
+    def copy_text(self,text):
+        # Explicit UI Copy uses GTK's clipboard, not a compositor-specific CLI.
+        display=Gdk.Display.get_default()
+        if display is None:raise ValueError('The desktop clipboard is unavailable.')
+        display.get_clipboard().set(text)
+
+    def voice_edit_clipboard(self):
+        clipboard=Gdk.Display.get_default().get_clipboard()
+        def read(clipboard,result):
+            try:text=clipboard.read_text_finish(result) or ''
+            except Exception as error:self.dialog('Clipboard unavailable',str(error));return
+            def done(response):
+                if not self.alive:return False
+                self.status.set_text(response.get('error') or response.get('outcome') or response.get('state','Ready'))
+                return False
+            def worker():
+                try:response=self.core.request({'command':'edit-clipboard','source':text})
+                except Exception as error:response={'error':str(error)}
+                GLib.idle_add(done,response)
+            threading.Thread(target=worker,daemon=True).start()
+        clipboard.read_text_async(None,read)
+
     def show_apps(self,*args):
-        import subprocess
         try:
-            classes=sorted({c.get('class','') for c in json.loads(subprocess.check_output(['hyprctl','-j','clients'],text=True,timeout=3)) if c.get('class')})
-            self.dialog('Open app classes','\n'.join(classes) or 'No apps found')
+            classes=open_app_classes()
+            self.dialog('Open app classes','\n'.join(classes) or 'App detection is unavailable on this desktop. Use general writing rules, or enter known app classes manually.')
         except Exception as error:self.dialog('Could not list apps',str(error))
 
     def action(self,fn):
@@ -1509,7 +1551,7 @@ class Workspace:
         approve=Gtk.Button(label='Approve and insert');approve.add_css_class('primary');controls.append(approve)
         def submit(command):
             text=proposal.get_buffer().get_text(proposal.get_buffer().get_start_iter(),proposal.get_buffer().get_end_iter(),True)
-            if command=='copy':self.core.copy_text(text);self.status.set_text('Edit copied');return
+            if command=='copy':self.copy_text(text);self.status.set_text('Edit copied');return
             approve.set_sensitive(False);discard.set_sensitive(False)
             payload={'command':'accept-edit','generation':result['generation'],'text':text} if command=='approve' else 'cancel'
             # Close before asking the daemon to focus the original target window.

@@ -4,10 +4,10 @@ app_dir="${XDG_DATA_HOME:-$HOME/.local/share}/bol-linux"
 bin_dir="$HOME/.local/bin"
 mkdir -p "$app_dir" "$bin_dir" "${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 install -m 755 "$(dirname "$0")/kivi_linux.py" "$app_dir/bol.py"
-install -m 644 "$(dirname "$0")/bol_features.py" "$(dirname "$0")/bol_ui.py" "$(dirname "$0")/bol_gtk.py" "$(dirname "$0")/bol_providers.py" "$(dirname "$0")/bol_audio.py" "$(dirname "$0")/bol_elevenlabs.py" "$(dirname "$0")/bol_themes.py" "$(dirname "$0")/bol_accounts.py" "$app_dir/"
+install -m 644 "$(dirname "$0")/bol_features.py" "$(dirname "$0")/bol_ui.py" "$(dirname "$0")/bol_gtk.py" "$(dirname "$0")/bol_providers.py" "$(dirname "$0")/bol_audio.py" "$(dirname "$0")/bol_elevenlabs.py" "$(dirname "$0")/bol_themes.py" "$(dirname "$0")/bol_accounts.py" "$(dirname "$0")/bol_desktop.py" "$app_dir/"
 cat > "$bin_dir/bol" <<EOF
 #!/bin/sh
-exec /usr/bin/python "$app_dir/bol.py" "\$@"
+exec /usr/bin/python3 "$app_dir/bol.py" "\$@"
 EOF
 chmod 755 "$bin_dir/bol"
 mkdir -p "$app_dir/icons" "$app_dir/themes"
@@ -23,4 +23,4 @@ Icon=audio-input-microphone
 Terminal=false
 Categories=Utility;Accessibility;
 EOF
-printf 'Installed Bol. Add the F8/F9/F10 Lua bindings from README.md to your Hyprland config.\nOpen settings: %s/bol settings\n' "$bin_dir"
+printf 'Installed Bol. Open Preferences for desktop shortcut setup; see docs/DESKTOPS.md.\nOpen settings: %s/bol settings\n' "$bin_dir"

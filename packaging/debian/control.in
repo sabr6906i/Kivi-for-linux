@@ -1,0 +1,15 @@
+Package: bol-linux
+Version: @VERSION@
+Section: utils
+Priority: optional
+Architecture: all
+Maintainer: Bol contributors <noreply@users.noreply.github.com>
+Depends: python3 (>= 3.10), python3-gi, gir1.2-gtk-4.0, python3-tk, pipewire-bin, wl-clipboard, libnotify-bin, ffmpeg
+Recommends: xdg-desktop-portal, xclip, xdotool, x11-utils
+Homepage: https://github.com/sabr6906i/Kivi-for-linux
+Description: Linux voice typing and writing workspace
+ Bol provides dictation, reviewable voice editing, text-to-speech, and optional
+ account preference sync. Speech engines include Sarvam, compatible APIs,
+ ElevenLabs through its helper, and a separately configured local whisper.cpp.
+ Hyprland is the primary desktop integration. Other desktops may use clipboard
+ output and manually assigned shortcuts; see the desktop support matrix.

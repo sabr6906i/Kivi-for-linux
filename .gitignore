@@ -8,3 +8,5 @@ settings.json
 *.sqlite3-*
 
 account-session.json
+
+dist/

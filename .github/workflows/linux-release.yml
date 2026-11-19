@@ -1,0 +1,128 @@
+name: Linux packages and desktop smoke checks
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish a GitHub prerelease after all package checks pass
+        type: boolean
+        default: false
+      tag:
+        description: Prerelease tag (used when publish is true)
+        default: v0.1.0-alpha.1
+        type: string
+permissions:
+  contents: read
+jobs:
+  ubuntu:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Install build and headless test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-gi gir1.2-gtk-4.0 python3-tk pipewire-bin wl-clipboard libnotify-bin ffmpeg xvfb dbus-x11 desktop-file-utils
+      - name: Unit tests
+        run: /usr/bin/python3 -m unittest discover -s tests -q
+      - name: Build and inspect Debian package
+        run: |
+          export SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)
+          /usr/bin/python3 scripts/build-deb.py --version '0.1.0~alpha1' --output dist
+          dpkg-deb --info dist/*.deb
+          dpkg-deb --contents dist/*.deb
+          sudo apt-get install -y ./dist/*.deb
+          /usr/bin/bol doctor
+          desktop-file-validate /usr/share/applications/io.github.sabr6906i.Bol.desktop
+      - name: GTK launch with simulated GNOME and KDE metadata
+        run: |
+          for desktop in GNOME KDE; do
+            dbus-run-session -- xvfb-run -a /usr/bin/python3 scripts/smoke-gtk.py --desktop "$desktop" --clipboard-roundtrip
+          done
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: debian-package
+          path: dist/*.deb
+          if-no-files-found: error
+  fedora:
+    runs-on: ubuntu-24.04
+    container: fedora:latest
+    steps:
+      - name: Install Fedora build tools
+        run: dnf install -y git rpm-build python3 python3-gobject gtk4 python3-tkinter pipewire-utils wl-clipboard libnotify ffmpeg-free xorg-x11-server-Xvfb dbus-daemon desktop-file-utils
+      - uses: actions/checkout@v7.0.1
+      - name: Unit tests
+        run: python3 -m unittest discover -s tests -q
+      - name: Build, inspect and install RPM
+        run: |
+          export SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)
+          python3 scripts/build-rpm.py --version 0.1.0 --release 0.1.alpha1 --output dist
+          rpm -qip dist/*.rpm
+          rpm -qlp dist/*.rpm
+          dnf install -y ./dist/*.rpm
+          /usr/bin/bol doctor
+          desktop-file-validate /usr/share/applications/io.github.sabr6906i.Bol.desktop
+      - name: GTK launch with simulated GNOME and KDE metadata
+        run: |
+          Xvfb :99 -screen 0 1280x800x24 &
+          xvfb_pid=$!
+          trap 'kill "$xvfb_pid"' EXIT
+          export DISPLAY=:99 GDK_BACKEND=x11
+          for attempt in $(seq 1 30); do
+            test -S /tmp/.X11-unix/X99 && break
+            sleep 0.2
+          done
+          for desktop in GNOME KDE; do
+            dbus-run-session -- python3 scripts/smoke-gtk.py --desktop "$desktop" --clipboard-roundtrip
+          done
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: fedora-package
+          path: dist/*.rpm
+          if-no-files-found: error
+  arch:
+    runs-on: ubuntu-24.04
+    container: archlinux:base-devel
+    steps:
+      - name: Install Arch build dependencies
+        run: pacman -Syu --noconfirm git python python-gobject gtk4 tk pipewire wl-clipboard libnotify ffmpeg
+      - uses: actions/checkout@v7.0.1
+      - name: Build as an unprivileged user
+        run: |
+          useradd -m builder
+          chown -R builder:builder "$GITHUB_WORKSPACE"
+          runuser -u builder -- scripts/build-arch.sh --version 0.1.0alpha1 --tag v0.1.0-alpha.1 --ref HEAD --output dist/arch
+          pacman -Qip dist/arch/*.pkg.tar.zst
+          cp dist/arch/.SRCINFO dist/arch/bol-linux.SRCINFO
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: arch-package
+          path: |
+            dist/arch/*.pkg.tar.zst
+            dist/arch/*.tar.gz
+            dist/arch/PKGBUILD
+            dist/arch/bol-linux.SRCINFO
+            dist/arch/SOURCE_COMMIT
+          if-no-files-found: error
+  publish:
+    if: inputs.publish
+    needs: [ubuntu, fedora, arch]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Validate tag and prepare checksums
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-alpha\.[0-9]+$ ]]
+          (cd dist && sha256sum * > SHA256SUMS)
+      - name: Publish explicitly labelled prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          gh release create "$RELEASE_TAG" dist/* --target "$GITHUB_SHA" --prerelease --title "Bol $RELEASE_TAG — Linux preview" --notes-file docs/RELEASE-v0.1.0-alpha.1.md

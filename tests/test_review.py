@@ -30,7 +30,7 @@ class ReviewTests(unittest.TestCase):
 
     def test_approval_uses_reviewed_text_and_rechecks_selection(self):
         service=self.pending();draft=service.command('review')
-        with patch.object(bol.subprocess,'check_output',return_value=json.dumps([{'address':'target'}])),patch.object(bol.subprocess,'run'),patch.object(bol.time,'sleep'),patch.object(bol,'active_window',return_value={'address':'target'}),patch.object(bol,'selection_for',return_value='Different selection'),patch.object(bol,'copy_text') as copy,patch.object(bol,'shortcut') as shortcut,patch.object(bol,'History') as history,patch.object(bol,'notify'):
+        with patch.object(bol,'focus_window',return_value=True),patch.object(bol.time,'sleep'),patch.object(bol,'active_window',return_value={'address':'target'}),patch.object(bol,'selection_for',return_value='Different selection'),patch.object(bol,'copy_text') as copy,patch.object(bol,'shortcut') as shortcut,patch.object(bol,'History') as history,patch.object(bol,'notify'):
             result=service.command({'command':'accept-edit','generation':draft['generation'],'text':'Reviewed wording'})
             copy.assert_called_once_with('Reviewed wording');shortcut.assert_not_called()
             history.return_value.add.assert_called_once_with('Editor','edit','Make it shorter','Reviewed wording')
@@ -45,7 +45,7 @@ class ReviewTests(unittest.TestCase):
 
     def test_focus_failure_preserves_reviewed_result(self):
         service=self.pending()
-        with patch.object(bol.subprocess,'check_output',side_effect=RuntimeError('Focus unavailable')):
+        with patch.object(bol,'focus_window',side_effect=RuntimeError('Focus unavailable')):
             result=service.command({'command':'accept-edit','generation':0,'text':'Recover this'})
         self.assertEqual(service.latest,'Recover this');self.assertIn('Focus unavailable',result['error'])
 
