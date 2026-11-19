@@ -125,3 +125,15 @@ class AccountTests(unittest.TestCase):
         with patch.object(self.client, 'request', return_value=result):
             with self.assertRaisesRegex(ValueError, 'different email'):self.client.verify_code('user@example.com', '123456')
         self.assertFalse(self.client.path.exists())
+
+    def test_auth_errors_explain_email_delivery_and_expired_links(self):
+        import io
+        import urllib.error
+        from unittest.mock import Mock
+        for error_code, message in [('email_address_not_authorized', 'custom SMTP'), ('over_email_send_rate_limit', 'sending limit'), ('otp_expired', 'already used')]:
+            body = json.dumps({'error_code': error_code, 'message': 'private-server-text'}).encode()
+            error = urllib.error.HTTPError(self.client.url, 403, '', {}, io.BytesIO(body))
+            opener = Mock();opener.open.side_effect = error
+            with self.subTest(error_code=error_code), patch('urllib.request.build_opener', return_value=opener):
+                with self.assertRaisesRegex(ValueError, message) as caught:self.client.send_code('user@example.com')
+                self.assertNotIn('private-server-text', str(caught.exception))

@@ -90,6 +90,24 @@ class AccountClient:
                     raise ValueError('The account server returned too much data.')
                 return json.loads(raw) if raw else {}
         except urllib.error.HTTPError as error:
+            # Use documented error codes, never display raw server bodies or tokens.
+            try:
+                details = json.loads(error.read(8192))
+                auth_code = details.get('error_code', details.get('code', ''))
+            except (ValueError, AttributeError):
+                auth_code = ''
+            finally:
+                error.close()
+            auth_messages = {
+                'email_address_not_authorized': 'Supabase’s default email sender only permits project-team addresses. The app owner must configure custom SMTP for other users.',
+                'over_email_send_rate_limit': 'Supabase’s email sending limit has been reached. Wait before requesting another email; the app owner can configure custom SMTP for public use.',
+                'email_not_confirmed': 'Your email has not been confirmed. Use the latest sign-in email and double-check its address.',
+                'otp_expired': 'The sign-in link or code expired or was already used. Request a new email and paste its link into Bol before opening it.',
+                'signup_disabled': 'New account registration is disabled in this Supabase project.',
+                'email_provider_disabled': 'Email sign-in is disabled in this Supabase project.',
+            }
+            if auth_code in auth_messages:
+                raise ValueError(auth_messages[auth_code]) from None
             if error.code == 409:
                 raise ValueError('Another device changed your cloud preferences. Restore the cloud version before uploading again.') from None
             messages = {400: 'The email or code was rejected. Check it or request a new code.',
